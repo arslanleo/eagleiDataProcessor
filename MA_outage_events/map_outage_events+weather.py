@@ -40,7 +40,7 @@ weather_dataset['gust_plus_speed'] = weather_dataset[['gust', 'sknt']].max(axis=
 print(weather_dataset.head())
 weather_dataset.to_csv('clean_weather_data_all.csv', index=False)
 # Load counties GeoJSON (replace 'ma_counties.geojson' with your file path)
-counties = gpd.read_file('gz_2010_us_050_00_5m.json', encoding='latin1')
+counties = gpd.read_file('../gz_2010_us_050_00_5m.json', encoding='latin1')
 print(counties.head())
 
 geometry = [Point(xy) for xy in zip(weather_dataset['lon'], weather_dataset['lat'])]
