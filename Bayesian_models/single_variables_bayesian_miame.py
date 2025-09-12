@@ -4,24 +4,39 @@ import matplotlib.pyplot as plt
 import pymc as pm
 import arviz as az
 
+# inputs
+state='Washington'
+county='King'
+start='2018'
+end='2024'
+threshold=0.001
+# target variables: wind_speed, gust, precipitation, Air_temp, Air_temp_min
+target_variable='Air_temp_min'
 
-#load datasets 
-df = pd.read_csv('Outage_Events_Summary_All_Miame_gust_Modified_SH_all_50_2018-2022_all_weather.csv')
+#load datasets
+#df=pd.read_csv(f'../Results/Visualization_of_Data_{county}_All_{start}-{end}_{threshold}_all_weather.csv')
+df = pd.read_csv(f'../Results/Outage_Events_Summary_All_{county}_gust_Modified_SH_all_{threshold}_{start}-{end}_all_weather.csv')
 print(df.head())
 print(df.columns)
 
-df = df[df['out_duration_max']<24]
-df['Air_temp'] = (df['Air_temp'] ).round() 
 
-df_gust = df.groupby('Air_temp').agg({
+df = df[df['out_duration_max']<24]
+df[target_variable] = (df[target_variable] ).round()
+
+# average all outage instances over their target weather variable
+df_gust = df.groupby(target_variable).agg({
     
     'area_cost_out_h': 'mean',
     'cust_normalized':    'mean'
    
 }).reset_index()
 
-x     = df_gust['Air_temp'].values
+x     = df_gust[target_variable].values
 x_new = np.linspace(x.min(), x.max(), 100)
+
+# tentative plotting
+plt.scatter(df_gust[target_variable],df_gust['cust_normalized'])
+plt.show()
 
 # 2) Helper to fit and predict
 def fit_loglinear(y_obs):
@@ -84,10 +99,10 @@ for ax, (title, y_data, y_mean, y_std, color) in zip(axes, panels):
     ax.tick_params(axis='both', which='major', labelsize=14)
     ax.legend(fontsize=16, loc='upper left')
 
-axes[-1].set_xlabel('Air Temp (°F)', fontsize=18, fontweight='bold')
+axes[-1].set_xlabel(f'{target_variable}', fontsize=18, fontweight='bold')
 ax.tick_params(axis='both', which='major', labelsize=14)
 plt.xticks(fontsize=12)
 plt.tight_layout()
-plt.show()
-
+#plt.show()
+plt.savefig(f'../Results/Bayesian_{target_variable}_{county}.png')
 
