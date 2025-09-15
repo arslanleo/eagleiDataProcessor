@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 
 def main(state, county, start, end, pct_threshold):
     # Load MCC Data
+    print("Aligning outage and weather data.")
     pdf = pd.read_csv('Eagle-idatasets/MCC.csv')
     county_to_fips=pd.read_csv('Eagle-idatasets/county_fips_master.csv', encoding='latin')
     ans=county_to_fips[county_to_fips['county_name']==f'{county} County']
@@ -57,7 +58,7 @@ def main(state, county, start, end, pct_threshold):
     # Initialize list for no_outage events
     no_outage_list = []
 
-    print("Finding non outages")
+    print("Finding timestamps with no outage events based on threshold.")
 
     # Loop through each zero index and extract corresponding weather data
     for zero_index in zero_indices:
@@ -107,7 +108,7 @@ def main(state, county, start, end, pct_threshold):
     no_outage_df = pd.DataFrame(no_outage_list)
 
     #print(no_outage_df.head())
-    print("Finding outage events")
+    print("Finding outage events based on threshold.")
 
     #no_outage_df = no_outage_df.drop(['run_start_time', 'sum','ws','N_sum'], axis =1)
     event_data_list = []
@@ -212,7 +213,7 @@ def main(state, county, start, end, pct_threshold):
                 event_data_list.append(event_data)
 
     # Convert event data list to DataFrame and save
-    print("Saving to csv")
+    print("Saving outage and non-outage events to csv.")
     event_df = pd.DataFrame(event_data_list)
     event_df.to_csv(f'Results/Outage_Events_Summary_All_{county}_{pct_threshold}_{start}-{end}.csv', index=False)
     #print(event_df.head())

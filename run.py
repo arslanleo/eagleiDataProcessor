@@ -23,19 +23,19 @@ threshold=0.001
 
 
 # ensure proper file paths exist
-output_folder = 'cleaned_data/'
+output_folder = f'outage_data/{state}/{county}'
 os.makedirs(output_folder, exist_ok=True)
 output_folder = 'Results/'
 os.makedirs(output_folder, exist_ok=True)
-output_folder = 'weather_data/'
+output_folder = f'weather_data/{state}'
 os.makedirs(output_folder, exist_ok=True)
 # fetch weather data
 fetch_weather_data.main(state, start, end)
 # clean + map weather data
-weather_cleaning.main(state, county)
+weather_cleaning.main(state, county, start, end)
 # clean outage data
 outage_cleaning.main(state, county, start, end)
 # merge outage and weather data
 map_outage_weather.main(state, county, start, end, threshold)
-print("Done! Please see all data "
-      "and event only data in results folder.")
+print("Done! Please see the combined outage-weather data "
+      "in results folder.")

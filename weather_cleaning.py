@@ -75,11 +75,11 @@ def find_county(file, county):
 # =====================================
 # Preprocess each weather component
 # =====================================
-def main(state, county):
+def main(state, county, start, end):
 
     # state='Florida'
     # county='Miami-Dade'
-    file=f'weather_data/{state}/asos.csv'
+    file=f'weather_data/{state}/weather_{state}_{start}_{end}.csv'
 
     print('Filtering by selected county.')
 

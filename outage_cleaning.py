@@ -6,9 +6,9 @@ import os
 def main(state, county, start, end):
     # Set file path and year range
     data_folder = 'Eaglei_data/'  # Directory containing raw CSV files
-    output_folder = './cleaned_data/'
+    output_folder = './outage_data/'
     os.makedirs(output_folder, exist_ok=True)
-
+    print("Begun process of processing the outage data.")
     # state_name = "Illinois"#Select State
     # county_name = "Cook" # Select County
 
@@ -83,7 +83,7 @@ def main(state, county, start, end):
             #df_expanded['year'] = year  # Optional: Add year info
 
             # Save individual expanded dataset
-            zoh_path = os.path.join(output_folder, f"cleaned_data/{state}/{county}ZOH_Cleaned_data_{year}_{county}_{state}.xlsx")
+            zoh_path = os.path.join(output_folder, f"outage_data/{state}/{county}ZOH_Cleaned_data_{year}_{county}_{state}.xlsx")
             df_expanded.to_excel(zoh_path, index=False)
 
             # Append to merged dataset
@@ -98,7 +98,7 @@ def main(state, county, start, end):
     if all_years_data:
         merged_all = pd.concat(all_years_data, ignore_index=True)
         merged_all.sort_values(by='run_start_time', inplace=True)
-        merged_output_path = os.path.join(output_folder, f"cleaned_data/{state}/{county}/Merged_ZOH_Cleaned_data_{start}_{end}_{county}_{state}.xlsx")
+        merged_output_path = os.path.join(output_folder, f"outage_data/{state}/{county}/Merged_ZOH_Cleaned_data_{start}_{end}_{county}_{state}.xlsx")
         merged_all.to_excel(merged_output_path, index=False)
         print("All years merged and saved successfully.")
     else:

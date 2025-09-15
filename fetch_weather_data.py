@@ -117,6 +117,7 @@ def download_alldata():
 
 def main(state, start, end):
     """Our main method"""
+    print("Began process of fetching weather data from IEM servers.")
     # timestamps in UTC to request data for
     startts = datetime(start, 1, 1)
     endts = datetime(end, 12, 31)
@@ -130,8 +131,9 @@ def main(state, start, end):
     data=''
     for station in stations:
         uri = f"{service}&station={station}"
-        print(f"Downloading: {station}")
+        print(f"Downloading: {station} weather data")
         data = data + download_data(uri)
+    print(f"Weather data has been downloaded for {state}. Saving to csv.")
     data=StringIO(data)
     # change to csv format
     data=pd.read_csv(data,sep=',',comment='#')
