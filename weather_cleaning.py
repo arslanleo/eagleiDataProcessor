@@ -75,46 +75,46 @@ def find_county(file, county):
 # =====================================
 # Preprocess each weather component
 # =====================================
+def run_weather_cleaning(state, county):
 
+    # state='Florida'
+    # county='Miami-Dade'
+    file=f'weather_data/{state}/asos.csv'
 
-state='Florida'
-county='Miami-Dade'
-file=f'weather_data/{state}/asos.csv'
+    print('Filtering by county.')
 
-print('Filtering by county.')
+    weather_data=find_county(file, county)
 
-weather_data=find_county(file, county)
+    print("Processing weather data.")
+    #df_dew    = preprocess_weather_data(file,        'dwpf')
+    df_gust   = preprocess_weather_data(weather_data,            'gust')
+    df_sped   = preprocess_weather_data(weather_data,       'sknt')
+    df_temp   = preprocess_weather_data(weather_data,            'tmpf')
+    #df_pres   = preprocess_weather_data('weather_data_NOAA/asos_pressure.csv',        'mslp')
+    #df_rh     = preprocess_weather_data('weather_data_NOAA/asos_RH.csv',              'relh')
+    #df_wdir   = preprocess_weather_data('weather_data_NOAA/asos_wind_direction.csv',  'drct')
+    df_precip = preprocess_weather_data(
+        df=weather_data,
+        column='p01m',
+        replace_dict={'T': 0.001, 'M': 0},
+        create_occurrence=True,
+        drop_columns=['station', 'lon', 'lat'],
+        keep_max=True
+    )
 
-print("Processing weather data.")
-#df_dew    = preprocess_weather_data(file,        'dwpf')
-df_gust   = preprocess_weather_data(weather_data,            'gust')
-df_sped   = preprocess_weather_data(weather_data,       'sknt')
-df_temp   = preprocess_weather_data(weather_data,            'tmpf')
-#df_pres   = preprocess_weather_data('weather_data_NOAA/asos_pressure.csv',        'mslp')
-#df_rh     = preprocess_weather_data('weather_data_NOAA/asos_RH.csv',              'relh')
-#df_wdir   = preprocess_weather_data('weather_data_NOAA/asos_wind_direction.csv',  'drct')
-df_precip = preprocess_weather_data(
-    df=weather_data,
-    column='p01m',
-    replace_dict={'T': 0.001, 'M': 0},
-    create_occurrence=True,
-    drop_columns=['station', 'lon', 'lat'],
-    keep_max=True
-)
+    # =====================================
+    # Merge all cleaned DataFrames on 'valid' timestamp
+    # =====================================
+    # Merge all DataFrames
+    print("Merging weather datasets.")
+    weather_dataset=pd.concat([df_temp['valid'],df_gust['gust'],df_sped['sknt'],df_precip['p01m'],df_temp['tmpf']],axis=1)
+    # combined_df = df_temp.copy()
+    # for df_component in [df_temp, df_gust, df_sped, df_precip]:
+    #     combined_df = combined_df.merge(df_component, on='valid', how='inner')
 
-# =====================================
-# Merge all cleaned DataFrames on 'valid' timestamp
-# =====================================
-# Merge all DataFrames
-print("Merging weather datasets.")
-weather_dataset=pd.concat([df_temp['valid'],df_gust['gust'],df_sped['sknt'],df_precip['p01m'],df_temp['tmpf']],axis=1)
-# combined_df = df_temp.copy()
-# for df_component in [df_temp, df_gust, df_sped, df_precip]:
-#     combined_df = combined_df.merge(df_component, on='valid', how='inner')
+    # Fill missing gust values with wind speed
+    weather_dataset['gust'] = weather_dataset['gust'].fillna(weather_dataset['sknt'])
 
-# Fill missing gust values with wind speed
-weather_dataset['gust'] = weather_dataset['gust'].fillna(weather_dataset['sknt'])
-
-# Preview
-#print(weather_dataset.head())
-weather_dataset.to_csv(f'weather_data/{state}/cleaned_weather_data_{county}.csv')
+    # Preview
+    #print(weather_dataset.head())
+    weather_dataset.to_csv(f'weather_data/{state}/cleaned_weather_data_{county}.csv')
