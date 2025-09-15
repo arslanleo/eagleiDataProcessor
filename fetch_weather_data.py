@@ -14,6 +14,9 @@ import sys
 import time
 from datetime import datetime, timedelta
 from urllib.request import urlopen
+import pandas as pd
+from io import StringIO
+
 
 # Number of attempts to download data
 MAX_ATTEMPTS = 6
@@ -62,26 +65,29 @@ def get_stations_from_filelist(filename):
     return stations
 
 
-def get_stations_from_networks():
+def get_stations_from_networks(state):
     """Build a station list by using a bunch of IEM networks."""
     stations = []
-    states = (
-        "AK AL AR AZ CA CO CT DE FL GA HI IA ID IL IN KS KY LA MA MD ME MI MN "
-        "MO MS MT NC ND NE NH NJ NM NV NY OH OK OR PA RI SC SD TN TX UT VA VT "
-        "WA WI WV WY"
-    )
-    networks = [f"{state}_ASOS" for state in states.split()]
+    state_to_code=pd.read_csv('Eagle-idatasets/county_fips_master.csv', encoding='latin')
+    result = state_to_code[state_to_code['state_name'] == state]
+    state_abbr = result['state_abbr'].values[0]
+    # states = (
+    #     "AK AL AR AZ CA CO CT DE FL GA HI IA ID IL IN KS KY LA MA MD ME MI MN "
+    #     "MO MS MT NC ND NE NH NJ NM NV NY OH OK OR PA RI SC SD TN TX UT VA VT "
+    #     "WA WI WV WY"
+    # )
+    network=f"{state_abbr}_ASOS"
+    #networks = [f"{state}_ASOS" for state in states.split()]
 
-    for network in networks:
-        # Get metadata
-        uri = (
-            "https://mesonet.agron.iastate.edu/"
-            f"geojson/network/{network}.geojson"
-        )
-        data = urlopen(uri)
-        jdict = json.load(data)
-        for site in jdict["features"]:
-            stations.append(site["properties"]["sid"])  # noqa
+    # Get metadata
+    uri = (
+        "https://mesonet.agron.iastate.edu/"
+        f"geojson/network/{network}.geojson"
+    )
+    data = urlopen(uri)
+    jdict = json.load(data)
+    for site in jdict["features"]:
+        stations.append(site["properties"]["sid"])  # noqa
     return stations
 
 
@@ -109,26 +115,35 @@ def download_alldata():
         now += interval
 
 
-def main():
+def main(state, start, end):
     """Our main method"""
     # timestamps in UTC to request data for
-    startts = datetime(2012, 8, 1)
-    endts = datetime(2012, 9, 1)
+    startts = datetime(start, 1, 1)
+    endts = datetime(end, 12, 31)
 
     service = SERVICE + "data=all&tz=Etc/UTC&format=comma&latlon=yes&"
 
     service += startts.strftime("year1=%Y&month1=%m&day1=%d&")
     service += endts.strftime("year2=%Y&month2=%m&day2=%d&")
 
-    stations = get_stations_from_networks()
+    stations = get_stations_from_networks(state)
+    data=''
     for station in stations:
         uri = f"{service}&station={station}"
         print(f"Downloading: {station}")
-        data = download_data(uri)
-        outfn = f"{station}_{startts:%Y%m%d%H%M}_{endts:%Y%m%d%H%M}.txt"
-        with open(outfn, "w", encoding="ascii") as fh:
-            fh.write(data)
+        data = data + download_data(uri)
+    data=StringIO(data)
+    # change to csv format
+    data=pd.read_csv(data,sep=',',comment='#')
+    # filter out repeated columns
+    data = data[data['tmpf'] != 'tmpf']
+    outfile=f'weather_data/{state}/weather_{state}_{start}_{end}.csv'
+    data.to_csv(outfile)
+    # outfn = f"{station}_{startts:%Y%m%d%H%M}_{endts:%Y%m%d%H%M}.txt"
+    # with open(outfn, "w", encoding="ascii") as fh:
+    #     fh.write(data)
 
-
-if __name__ == "__main__":
-    download_alldata()
+# main('Rhode Island',2018,2019)
+# #
+# if __name__ == "__main__":
+#     download_alldata()

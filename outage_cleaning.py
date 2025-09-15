@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 
-def outage_cleaning(state, county, start, end):
+def main(state, county, start, end):
     # Set file path and year range
     data_folder = 'Eaglei_data/'  # Directory containing raw CSV files
     output_folder = './cleaned_data/'

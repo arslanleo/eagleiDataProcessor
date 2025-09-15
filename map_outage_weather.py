@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-def outage_weather_agg(state, county, start, end):
+def main(state, county, start, end, pct_threshold):
     # Load MCC Data
     pdf = pd.read_csv('Eagle-idatasets/MCC.csv')
     county_to_fips=pd.read_csv('Eagle-idatasets/county_fips_master.csv', encoding='latin')
@@ -12,7 +12,6 @@ def outage_weather_agg(state, county, start, end):
     result = pdf[pdf['County_FIPS'] == target_fips]
     customers = result['Customers'].values
     print(customers)
-    pct_threshold=0.001 # percent as decimal of finding an event in data
     threshold=round(pct_threshold*int(customers))
 
     # Load DataSets; Outage and Weather DataSets
