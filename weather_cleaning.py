@@ -46,7 +46,7 @@ def preprocess_weather_data(df, column, replace_dict=None, create_occurrence=Fal
 
     return df
 
-def find_county(file, county):
+def find_county(file, state, county):
     # Event Datasets
     weather_dataset=pd.read_csv(file)
     columns_to_keep = ['station', 'valid', 'tmpf', 'sknt', 'p01i', 'gust', 'lon', 'lat']
@@ -111,7 +111,7 @@ def main(state, county, start, end):
 
     print('Sorting weather data at the county-level.')
 
-    weather_data=find_county(file, county)
+    weather_data=find_county(file, state, county)
 
     print("Cleaning weather data.")
     #df_dew    = preprocess_weather_data(file,        'dwpf')
@@ -134,7 +134,7 @@ def main(state, county, start, end):
     # Merge all cleaned DataFrames on 'valid' timestamp
     # =====================================
     # Merge all DataFrames
-    weather_dataset=pd.concat([df_temp['valid'],df_gust['gust'],df_sped['sknt'],df_precip['p01m'],df_temp['tmpf']],axis=1)
+    weather_dataset=pd.concat([df_temp['valid'],df_gust['gust'],df_sped['sknt'],df_precip['p01i'],df_temp['tmpf']],axis=1)
     # combined_df = df_temp.copy()
     # for df_component in [df_temp, df_gust, df_sped, df_precip]:
     #     combined_df = combined_df.merge(df_component, on='valid', how='inner')

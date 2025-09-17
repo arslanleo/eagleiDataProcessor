@@ -6,17 +6,20 @@ def main(state, county, start, end, pct_threshold):
     # Load MCC Data
     print("Aligning outage and weather data.")
     pdf = pd.read_csv('Eagle-idatasets/MCC.csv')
+
+    # find number of customers in county
     county_to_fips=pd.read_csv('Eagle-idatasets/county_fips_master.csv', encoding='latin')
     ans=county_to_fips[county_to_fips['county_name']==f'{county} County']
     ans=ans[ans['state_name']==state]
-    target_fips=ans['fips'].values
+    target_fips=ans['fips'].values[0]
+    pdf['County_FIPS']=pd.to_numeric(pdf['County_FIPS'], downcast='integer',errors='coerce')
     result = pdf[pdf['County_FIPS'] == target_fips]
-    customers = result['Customers'].values
-    print(customers)
+    customers = result['Customers'].values[0]
+    #print(customers)
     threshold=round(pct_threshold*int(customers))
 
     # Load DataSets; Outage and Weather DataSets
-    df_outage_data = pd.read_excel(f'cleaned_data/{state}/{county}/Merged_ZOH_Cleaned_data_{start}_{end}_{county}_{state}.xlsx')
+    df_outage_data = pd.read_excel(f'outage_data//{state}//{county}//Merged_ZOH_Cleaned_data_{start}_{end}_{county}_{state}.xlsx')
     df_weather_data = pd.read_csv(f'weather_data/{state}/cleaned_weather_data_{county}.csv')
 
 
@@ -42,7 +45,7 @@ def main(state, county, start, end, pct_threshold):
     df_weather_data['tmpf'] = pd.to_numeric(df_weather_data['tmpf'],errors = 'coerce').astype(float)
     #df_weather_data['mslp'] = pd.to_numeric(df_weather_data['mslp'],errors = 'coerce').astype(float)
     #df_weather_data['relh'] = pd.to_numeric(df_weather_data['relh'],errors = 'coerce').astype(float)
-    df_weather_data['p01m'] = pd.to_numeric(df_weather_data['p01m'],errors = 'coerce').astype(float)
+    df_weather_data['p01i'] = pd.to_numeric(df_weather_data['p01i'],errors = 'coerce').astype(float)
     #df_weather_data['poccurence'] = pd.to_numeric(df_weather_data['poccurence'],errors = 'coerce').astype(float)
     #print(df_weather_data.head())
 
@@ -67,7 +70,7 @@ def main(state, county, start, end, pct_threshold):
         # Extract weather data for the zero outage period
         max_ws = df_weather_data['sknt'].loc[zero_index_weather:zero_index_weather].max()
         max_g = df_weather_data['gust'].loc[zero_index_weather:zero_index_weather].max()
-        pp_max = df_weather_data['p01m'].loc[zero_index_weather:zero_index_weather].max()
+        pp_max = df_weather_data['p01i'].loc[zero_index_weather:zero_index_weather].max()
      #  pocc = df_weather_data['poccurence'].loc[zero_index_weather:zero_index_weather].max()
        # max_dirct = df_weather_data['drct'].loc[zero_index_weather:zero_index_weather].max()
        # max_dwpf = df_weather_data['dwpf'].loc[zero_index_weather:zero_index_weather].max()
@@ -173,7 +176,7 @@ def main(state, county, start, end, pct_threshold):
                 #max_T = df_weather_data['T'].loc[first_zero_index_weather:second_zero_index_weather].max()
                 #min_T = df_weather_data['T'].loc[first_zero_index_weather:second_zero_index_weather].min()
                 max_g = df_weather_data['gust'].loc[first_zero_index_weather:second_zero_index_weather].max()
-                pp_max = df_weather_data['p01m'].loc[first_zero_index_weather:second_zero_index_weather].max()
+                pp_max = df_weather_data['p01i'].loc[first_zero_index_weather:second_zero_index_weather].max()
                 #pocc = df_weather_data['poccurence'].loc[first_zero_index_weather:second_zero_index_weather].max()
                 #max_dirct = df_weather_data['drct'].loc[first_zero_index_weather:second_zero_index_weather].max()
                 #max_dwpf = df_weather_data['dwpf'].loc[first_zero_index_weather:second_zero_index_weather].max()
@@ -223,9 +226,9 @@ def main(state, county, start, end, pct_threshold):
     analysis_df.to_csv(f'Results/Data_All_{county}_{pct_threshold}_{start}-{end}.csv',index = False)
 
 
-# # Example
-# state='Washington'
-# county='King'
+# Example
+# state='Rhode Island'
+# county='Bristol'
 # start=2018
-# end=2024
-# outage_weather_agg(state, county, start, end)
+# end=2019
+# main(state, county, start, end, 0.001)
