@@ -15,10 +15,10 @@ import outage_cleaning
 import os
 
 # inputs
-state="Texas"
-county='Harris'
-start=2018
-end=2024
+state="California"
+county='Los Angeles'
+start=2019
+end=2020
 threshold=0.001
 
 

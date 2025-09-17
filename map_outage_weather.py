@@ -223,9 +223,9 @@ def main(state, county, start, end, pct_threshold):
     analysis_df.to_csv(f'Results/Data_All_{county}_{pct_threshold}_{start}-{end}.csv',index = False)
 
 
-# Example
-state='Washington'
-county='King'
-start=2018
-end=2024
-outage_weather_agg(state, county, start, end)
+# # Example
+# state='Washington'
+# county='King'
+# start=2018
+# end=2024
+# outage_weather_agg(state, county, start, end)
