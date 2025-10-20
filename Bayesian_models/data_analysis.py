@@ -2,10 +2,10 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 # inputs - change as needed
-state='Arizona'
-county='Maricopa'
+state='Rhode Island'
+county='Bristol'
 start='2018'
-end='2024'
+end='2019'
 threshold=0.001
 
 def plot_wind(df):
@@ -37,10 +37,12 @@ def plot_min_temp(df):
     plt.show()
 
 # read in data
-outage_event_df=pd.read_csv(f'../Results/Outage_Events_Summary_All_{county}_gust_Modified_SH_all_{threshold}_{start}-{end}_all_weather.csv')
-outage_weather_df=pd.read_csv(f'../Results/Visualization_of_Data_{county}_All_{start}-{end}_{threshold}_all_weather.csv')
+outage_event_df=pd.read_csv(f'../Results/Outage_Events_Summary_All_{county}_{threshold}_{start}-{end}.csv')
+outage_weather_df=pd.read_csv(f'../Results/Data_All_{county}_{threshold}_{start}-{end}.csv')
 
+#plot_wind(outage_event_df)
 #plot_wind(outage_event_df)
 #plot_precip(outage_weather_df)
 #plot_max_temp(outage_weather_df)
+
 breakpoint()

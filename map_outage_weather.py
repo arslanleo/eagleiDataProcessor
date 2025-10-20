@@ -32,9 +32,9 @@ def main(state, county, start, end, pct_threshold):
 
     df_weather_data = df_weather_data[(df_weather_data['DATE'] >= f'{start}-01-01') & (df_weather_data['DATE'] < f'{end}-01-01')]#Training_Data
     #df_weather_data = df_weather_data[df_weather_data['DATE'] >= '2023-01-01'] #Validation_Data
-    df_outage_data.set_index('run_start_time', inplace = True )
+    df_outage_data.set_index('run_start_time', inplace = True, drop=False)
     # Set datetime as index for weather data
-    df_weather_data.set_index('DATE', inplace=True)
+    df_weather_data.set_index('DATE', inplace=True, drop=False)
     #print(df_outage_data.head())
     # Convert 'ws' and 'T' columns to float
     df_weather_data['sknt'] = pd.to_numeric(df_weather_data['sknt'], errors='coerce').astype(float)
@@ -71,6 +71,9 @@ def main(state, county, start, end, pct_threshold):
         max_ws = df_weather_data['sknt'].loc[zero_index_weather:zero_index_weather].max()
         max_g = df_weather_data['gust'].loc[zero_index_weather:zero_index_weather].max()
         pp_max = df_weather_data['p01i'].loc[zero_index_weather:zero_index_weather].max()
+        year=df_weather_data['DATE'].loc[zero_index_weather].year
+        month=df_weather_data['DATE'].loc[zero_index_weather].month
+        day=df_weather_data['DATE'].loc[zero_index_weather].day
      #  pocc = df_weather_data['poccurence'].loc[zero_index_weather:zero_index_weather].max()
        # max_dirct = df_weather_data['drct'].loc[zero_index_weather:zero_index_weather].max()
        # max_dwpf = df_weather_data['dwpf'].loc[zero_index_weather:zero_index_weather].max()
@@ -100,6 +103,9 @@ def main(state, county, start, end, pct_threshold):
            # 'dew_point_temp': max_dwpf,
             'Air_temp': max_tmpf,
             'Air_temp_min': min_tmpf,
+            'year':year,
+            'month':month,
+            'day':day,
            # 'Pressure': max_mslp,
            # 'RH':max_relh,
             'cummulative_customer_out' : 0
@@ -124,7 +130,7 @@ def main(state, county, start, end, pct_threshold):
         second_zero_index_weather = pd.to_datetime(second_zero_index)
 
         # Slicing the outage data for the current event
-        sliced_df = df_outage_data.loc[first_zero_index:second_zero_index].reset_index(drop=False)
+        sliced_df = df_outage_data.loc[first_zero_index:second_zero_index]
         sliced_df.index = range(1, len(sliced_df) + 1)
         #print(sliced_df.head())
         # Check if there are any non-zero values to process
@@ -184,7 +190,9 @@ def main(state, county, start, end, pct_threshold):
                 min_tmpf = df_weather_data['tmpf'].loc[first_zero_index_weather:second_zero_index_weather].min()
                 #max_mslp = df_weather_data['mslp'].loc[first_zero_index_weather:second_zero_index_weather].max()
                 #max_relh = df_weather_data['relh'].loc[first_zero_index_weather:second_zero_index_weather].max()
-
+                year = df_weather_data['DATE'].loc[first_zero_index_weather].year
+                month = df_weather_data['DATE'].loc[first_zero_index_weather].month
+                day = df_weather_data['DATE'].loc[first_zero_index_weather].day
 
                 event_data = {
                     'cust_out_max': cust_out_max,
@@ -201,6 +209,9 @@ def main(state, county, start, end, pct_threshold):
                     #'Minimum_Temperature(degree)': min_T,
                     'gust':max_g,
                     'precipitation':pp_max,
+                    'year': year,
+                    'month': month,
+                    'day': day,
                     #'ppocc':pocc,
                     #'wind_direction':max_dirct,
                     #'dew_point_temp': max_dwpf,
@@ -227,8 +238,8 @@ def main(state, county, start, end, pct_threshold):
 
 
 # Example
-# state='Rhode Island'
-# county='Bristol'
-# start=2018
-# end=2019
-# main(state, county, start, end, 0.001)
+state='Rhode Island'
+county='Bristol'
+start=2018
+end=2019
+main(state, county, start, end, 0.001)

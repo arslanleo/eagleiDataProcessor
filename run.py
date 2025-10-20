@@ -15,10 +15,10 @@ import outage_cleaning
 import os
 
 # inputs
-state="Rhode Island"
-county='Bristol'
+state="Washington"
+county='Mason'
 start=2018
-end=2019
+end=2024
 threshold=0.001
 
 
