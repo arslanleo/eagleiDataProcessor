@@ -238,8 +238,8 @@ def main(state, county, start, end, pct_threshold):
 
 
 # Example
-state='Rhode Island'
-county='Bristol'
-start=2018
-end=2019
-main(state, county, start, end, 0.001)
+# state='Rhode Island'
+# county='Bristol'
+# start=2018
+# end=2019
+# main(state, county, start, end, 0.001)
