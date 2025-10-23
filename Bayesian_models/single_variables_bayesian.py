@@ -5,8 +5,8 @@ import pymc as pm
 import arviz as az
 
 # inputs
-state='Washington'
-county='King'
+state='Massachusetts'
+county='Worcester'
 start='2018'
 end='2024'
 threshold=0.001
@@ -90,7 +90,7 @@ for ax, (title, y_data, y_mean, y_std, color) in zip(axes, panels):
         color=color, alpha=0.2, label='95% CI (±2σ)'
     )
     ax.set_ylabel(title, fontsize=18, fontweight='bold')
-    ax.set_yscale('log')
+#    ax.set_yscale('log')
     ax.grid(True, linestyle='--', alpha=0.4)
     ax.tick_params(axis='both', which='major', labelsize=14)
     ax.legend(fontsize=16, loc='upper left')

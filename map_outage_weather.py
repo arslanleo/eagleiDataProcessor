@@ -25,9 +25,10 @@ def main(state, county, start, end, pct_threshold):
 
     # Change the datetime
     df_weather_data['DATE'] = pd.to_datetime(df_weather_data['valid'])
+    # drop first row that weather does not interpolate
+    df_outage_data=df_outage_data[(df_outage_data['run_start_time']!=f'{start}-01-01 00:00:00')]
     df_outage_data['run_start_time'] = pd.to_datetime(df_outage_data['run_start_time'])
     df_outage_data = df_outage_data[(df_outage_data['run_start_time'] >= f'{start}-01-01') & (df_outage_data['run_start_time'] < f'{end}-01-01')]#Training_Data
-
     #df_outage_data = df_outage_data[df_outage_data['run_start_time'] >= '2023-01-01']# Validation_data
 
     df_weather_data = df_weather_data[(df_weather_data['DATE'] >= f'{start}-01-01') & (df_weather_data['DATE'] < f'{end}-01-01')]#Training_Data
