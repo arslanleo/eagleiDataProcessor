@@ -136,15 +136,15 @@ def main(state, county, start, end, pct_threshold):
         #print(sliced_df.head())
         # Check if there are any non-zero values to process
         if (sliced_df['sum'].values > 0).any():
-            sliced_df['run_start_time'] = pd.to_datetime(sliced_df['run_start_time'])
-            sliced_df['time_hours'] = (sliced_df['run_start_time'] - sliced_df['run_start_time'].iloc[0]).dt.total_seconds() / 3600
-            sliced_df['KW_out'] = (
+            sliced_df.loc[:,'run_start_time'] = pd.to_datetime(sliced_df['run_start_time'])
+            sliced_df.loc[:,'time_hours'] = (sliced_df['run_start_time'] - sliced_df['run_start_time'].iloc[0]).dt.total_seconds() / 3600
+            sliced_df.loc[:,'KW_out'] = (
                 sliced_df['N_sum'] * 0.34 * 4.19 +
                 sliced_df['N_sum'] * 0.35 * 23.91 +
                 sliced_df['N_sum'] * 0.31 * 1301.0041
             )
-            sliced_df['change'] = sliced_df['sum'].diff()
-            sliced_df['cummulative_customer_out'] = sliced_df.loc[sliced_df['change'] > 0, 'sum'].sum()
+            sliced_df.loc[:,'change'] = sliced_df['sum'].diff()
+            sliced_df.loc[:,'cummulative_customer_out'] = sliced_df.loc[sliced_df['change'] > 0, 'sum'].sum()
 
 
 

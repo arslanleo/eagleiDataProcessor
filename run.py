@@ -15,8 +15,8 @@ import outage_cleaning
 import os
 
 # inputs
-state="Massachusetts"
-county='Berkshire 3eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeewgvr'
+state="Washington"
+county='Pierce'
 start=2018
 end=2024
 threshold=0.001

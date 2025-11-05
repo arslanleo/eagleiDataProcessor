@@ -5,13 +5,13 @@ import pymc as pm
 import arviz as az
 
 # inputs
-state='Massachusetts'
-county='Worcester'
+state='Washington'
+county='King'
 start='2018'
 end='2024'
 threshold=0.001
 # target variables: wind_speed, gust, precipitation, Air_temp, Air_temp_min
-target_variable='gust'
+target_variable='Air_temp'
 
 #load datasets
 #df=pd.read_csv(f'../Results/Visualization_of_Data_{county}_All_{start}-{end}_{threshold}_all_weather.csv')
