@@ -1,6 +1,6 @@
 import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
+# import numpy as np
+# import matplotlib.pyplot as plt
 import geopandas as gpd
 from shapely.geometry import Point
 from shapely.ops import nearest_points
@@ -48,7 +48,7 @@ def preprocess_weather_data(df, column, replace_dict=None, create_occurrence=Fal
 
 def find_county(file, state, county):
     # Event Datasets
-    weather_dataset=pd.read_csv(file)
+    weather_dataset=pd.read_csv(file, low_memory=False)
     columns_to_keep = ['station', 'valid', 'tmpf', 'sknt', 'p01i', 'gust', 'lon', 'lat']
     weather_dataset = weather_dataset[columns_to_keep]
 

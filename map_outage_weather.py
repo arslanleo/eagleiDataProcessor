@@ -131,11 +131,15 @@ def main(state, county, start, end, pct_threshold):
         second_zero_index_weather = pd.to_datetime(second_zero_index)
 
         # Slicing the outage data for the current event
-        sliced_df = df_outage_data.loc[first_zero_index:second_zero_index]
-        sliced_df.index = range(1, len(sliced_df) + 1)
+        sliced_df = df_outage_data.loc[first_zero_index:second_zero_index].copy()
+        sliced_df.reset_index(drop=True, inplace=True)
+        sliced_df.index += 1  # Start index from 1
+        # sliced_df.index = range(1, len(sliced_df) + 1)
         #print(sliced_df.head())
+        
         # Check if there are any non-zero values to process
-        if (sliced_df['sum'].values > 0).any():
+        # if (sliced_df['sum'].values > 0).any():
+        if (sliced_df['sum'] > 0).any():
             sliced_df.loc[:,'run_start_time'] = pd.to_datetime(sliced_df['run_start_time'])
             sliced_df.loc[:,'time_hours'] = (sliced_df['run_start_time'] - sliced_df['run_start_time'].iloc[0]).dt.total_seconds() / 3600
             sliced_df.loc[:,'KW_out'] = (
@@ -165,7 +169,7 @@ def main(state, county, start, end, pct_threshold):
 
             # Check for the max index safely
             if sliced_df['sum'].max() > 0:  # Ensure there is at least one non-zero value
-                max_index = sliced_df['sum'].idxmax()
+                max_index = int(sliced_df['sum'].idxmax())
                 impact_time = sliced_df['time_hours'].iloc[max_index] - sliced_df['time_hours'].iloc[0]
                 outage_slope = (sliced_df['N_sum'].iloc[max_index] - sliced_df['N_sum'].iloc[0]) / impact_time
                 recovery_duration = sliced_df['time_hours'].iloc[-1] - sliced_df['time_hours'].iloc[max_index]
