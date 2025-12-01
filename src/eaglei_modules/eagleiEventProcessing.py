@@ -21,7 +21,7 @@ from __future__ import annotations
 from typing import Dict, List, Tuple, Any
 
 import re
-import os, sys
+import os
 from tqdm import tqdm
 import pandas as pd
 import numpy as np
@@ -102,7 +102,8 @@ def verify_eaglei_files(verbose: int = 1) -> list[str]:
     return eaglei_files
 
 
-def load_eaglei_state_data(state_name: str, verbose: int = 1) -> Tuple[pd.DataFrame, pd.DataFrame]:
+def load_eaglei_state_data(state_name: str, 
+                           verbose: int = 1) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Function to read and clean EAGLEi outage data for a specific state.
 
@@ -514,7 +515,21 @@ def identify_and_rank_time_gaps(df: pd.DataFrame,
 
 
 def _calculate_gap_metrics(gap_info: Dict) -> Dict:
-    """Calculate various metrics for a single gap based on neighboring customer counts."""
+    """
+    Calculate various metrics for a single gap based on neighboring customer counts.
+    
+    Parameters:
+    -----------
+    gap_info : Dict
+        Dictionary containing information about the gap, including:
+        - 'customers_before': Number of customers before the gap
+        - 'customers_after': Number of customers after the gap  
+    
+    Returns:
+    --------
+    Dict
+        Dictionary containing calculated metrics for the gap.
+    """
     
     customers_before = gap_info['customers_before']
     customers_after = gap_info['customers_after']
@@ -539,7 +554,23 @@ def _calculate_gap_metrics(gap_info: Dict) -> Dict:
 
 def _apply_gap_ranking(gaps_df: pd.DataFrame, 
                        ranking_method: str = 'customer_weighted') -> pd.DataFrame:
-    """Applying ranking algorithms to the gaps DataFrame."""
+    """
+    Applying ranking algorithms to the gaps DataFrame.
+    
+    Parameters:
+    -----------
+    gaps_df : pd.DataFrame
+        DataFrame containing gap information and metrics
+    ranking_method : str, default='customer_weighted'
+        Ranking method to use. Options:
+        - 'customer_weighted': Focus on customer impact
+        - 'time_weighted': Focus on time duration
+    
+    Returns:
+    --------
+    pd.DataFrame
+        DataFrame with added ranking information
+    """
     
     # Normalize metrics to 0-1 range for fair comparison
     if 'gap_duration_minutes' in gaps_df.columns:
@@ -592,6 +623,15 @@ def analyze_gap_rankings(gaps_df: pd.DataFrame,
         DataFrame with ranked gaps from identify_and_rank_time_gaps
     top_n : int, default=10
         Number of top gaps to display
+    verbose : int, default=1
+        Verbosity level for logging
+        - 0: No print outputs
+        - 1: Basic print outputs
+        - 2: Detailed print outputs (including all intermediate steps)
+    
+    Returns:
+    --------
+    None
     """
     
     if len(gaps_df) == 0:
@@ -650,6 +690,10 @@ def visualize_gap_analysis(df: pd.DataFrame, rank_quantile: float | None = None)
     rank_quantile : float, optional
         Quantile to determine rank threshold for highlighting (e.g., 0.5 for median)
         If None, median (0.5) is used as default.
+
+    Returns:
+    --------
+    None
     """
     
     if len(df) == 0:
@@ -844,6 +888,9 @@ def plot_eaglei_filled_gaps(df: pd.DataFrame,
     - df: DataFrame containing the EAGLE-I outages data.
     - customer_column: Name of the column containing customer data (default is constants.CUSTOMERS_COL).
     - timestamp_column: Name of the column containing timestamps (default is constants.TIMESTAMP_COL).
+
+    Returns:
+    - None
     """
     
     if len(df) == 0:
@@ -1151,6 +1198,21 @@ def get_eaglei_processes(outage_df: pd.DataFrame,
                          event_method: str = 'ac', 
                          timestamp_column: str = constants.TIMESTAMP_COL, 
                          customer_column: str = constants.CUSTOMERS_COL) -> Tuple[List, List, List]:
+    """
+    Function to get the outage, restore, and performance processes for a given event number
+
+    Parameters:
+        outage_df: the outage data frame
+        event_number: the event number to get the processes for
+        event_method: the method used to extract the event number (default is 'ac')
+        timestamp_column: the name of the timestamp column (default is constants.TIMESTAMP_COL)
+        customer_column: the name of the customer column (default is constants.CUSTOMERS_COL)
+    Returns:
+        A tuple containing three lists:
+            - outages: list of tuples (timestamp, customers_out) for outages
+            - restores: list of tuples (timestamp, customers_restored) for restorations
+            - performance_data: list of tuples (timestamp, customers_out) for performance curve
+    """
 
     event_column = f'event_number_{event_method}'
     event_data = outage_df[outage_df[event_column] == event_number].copy()
@@ -1267,6 +1329,20 @@ def get_eaglei_event_stats(eaglei_df: pd.DataFrame,
                            event_method: str = 'ac', 
                            timestamp_column: str = constants.TIMESTAMP_COL, 
                            customer_column: str = constants.CUSTOMERS_COL) -> pd.DataFrame | Dict:
+    """
+    Function to get event statistics for one or more event numbers
+    
+    Parameters:
+        eaglei_df: the EAGLEi data frame
+        event_numbers: a single event number or a list of event numbers
+        event_method: the method used to extract the events (default is 'ac')
+        timestamp_column: the name of the timestamp column (default is constants.TIMESTAMP_COL)
+        customer_column: the name of the customer column (default is constants.CUSTOMERS_COL)
+        
+    Returns:
+        A DataFrame if multiple event numbers are provided, or a dictionary if a single event number is provided
+    """
+
     if len(event_numbers) == 1:
         return _get_eaglei_event_stats_single_event(eaglei_df, event_numbers[0], event_method, timestamp_column, customer_column)
     else:
@@ -1296,8 +1372,11 @@ def plot_eaglei_event_curves(outage_df: pd.DataFrame,
         outage_df: the outage data frame
         event_number: the event number to plot
         event_method: the method used to extract the events (default is 'ac')
-        quantity: the quantity to plot (default is 'Elements')
-        labels_timezone: the timezone to use for the x-axis labels (default is 'UTC')
+        timestamp_column: the name of the timestamp column (default is constants.TIMESTAMP_COL)
+        customer_column: the name of the customer column (default is constants.CUSTOMERS_COL)
+
+    Returns:
+        None
     """
     outages, restores, performance_process = get_eaglei_processes(outage_df, event_number, event_method, timestamp_column, customer_column)
 
@@ -1352,8 +1431,11 @@ def plot_eaglei_log_performance(outage_df: pd.DataFrame,
         outage_df: the outage data frame
         event_number: the event number to plot
         event_method: the method used to extract the events (default is 'ac')
-        quantity: the quantity to plot (default is 'Elements')
-        labels_timezone: the timezone to use for the x-axis labels (default is 'UTC')
+        timestamp_column: the name of the timestamp column (default is constants.TIMESTAMP_COL)
+        customer_column: the name of the customer column (default is constants.CUSTOMERS_COL)
+    
+    Returns:
+        None
     """
     outages, _, performance_process = get_eaglei_processes(outage_df, event_number, event_method, timestamp_column, customer_column)
     
@@ -1396,8 +1478,11 @@ def plot_multiple_eaglei_performance_curves(outage_df: pd.DataFrame,
         outage_df: the outage data frame
         event_numbers: the list of event numbers to plot
         event_method: the method used to extract the events (default is 'ac')
-        quantity: the quantity to plot (default is 'Elements')
-        labels_timezone: the timezone to use for the x-axis labels (default is 'UTC')
+        timestamp_column: the name of the timestamp column (default is constants.TIMESTAMP_COL)
+        customer_column: the name of the customer column (default is constants.CUSTOMERS_COL)
+    
+    Returns:
+        None
     """
     num_events = len(event_numbers)
     num_cols = 5
@@ -1460,8 +1545,20 @@ def plot_multiple_eaglei_performance_curves(outage_df: pd.DataFrame,
 
 
 def _detect_missing_data_gaps(df: pd.DataFrame, 
-                              timestamp_col: str, 
+                              timestamp_col: str = constants.TIMESTAMP_COL, 
                               freq: str = "15min") -> pd.DataFrame:
+    """
+    Detects missing data gaps in the timestamp column of the dataframe.
+    Returns a dataframe with start and end timestamps of the missing gaps and their duration.
+    
+    Parameters:
+    - df: The input dataframe containing the timestamp column.
+    - timestamp_col: The name of the timestamp column in the dataframe.
+    - freq: The frequency of the EAGLE-I timestamps (default is "15min").
+    
+    Returns:
+    - pd.DataFrame: A dataframe with columns 'start', 'end', and 'duration' indicating the missing data gaps.
+    """
     
     # create a new dataframe using the timestamp column values excluding the last value
     missing_df = df.iloc[0:-1][timestamp_col].to_frame(name='start').copy()
@@ -1475,12 +1572,22 @@ def _detect_missing_data_gaps(df: pd.DataFrame,
 
 
 def _detect_flatline_periods(df_sorted: pd.DataFrame, 
-                             timestamp_col: str = "run_start_time", 
-                             value_col: str = "customers_out", 
+                             timestamp_col: str = constants.TIMESTAMP_COL, 
+                             value_col: str = constants.CUSTOMERS_COL, 
                              min_value: int = 1, 
                              var_window: str = "12h") -> pd.DataFrame:
     """
     Detects flatline anomalies where the series is stuck above min_value.
+    
+    Parameters:
+    - df_sorted: The input dataframe sorted by timestamp.
+    - timestamp_col: The name of the timestamp column in the dataframe.
+    - value_col: The name of the value column to check for flatlines.
+    - min_value: The minimum value threshold to consider for flatlines.
+    - var_window: The rolling window size for variance calculation (default is "12h").
+    
+    Returns:
+    - pd.DataFrame: A dataframe containing detected flatline anomalies with start time, end time, duration, and flat value.
     """
     # Rolling variance
     df_sorted["rolling_var"] = df_sorted.rolling(window=var_window, min_periods=1, on=timestamp_col)[value_col].var()
@@ -1523,7 +1630,16 @@ def _detect_flatline_periods(df_sorted: pd.DataFrame,
 
 def _max_consecutive_true_duration(mask: Any, 
                                    index: Any) -> pd.Timedelta:
-    """Return max duration (Timedelta) of consecutive True segments in mask (same length as index)."""
+    """
+    Return max duration (Timedelta) of consecutive True segments in mask (same length as index).
+    
+    Parameters:
+    - mask: Boolean array indicating True/False values.
+    - index: DatetimeIndex corresponding to the mask.
+    
+    Returns:
+    - pd.Timedelta: Maximum duration of consecutive True segments.
+    """
     max_dur = pd.Timedelta(0)
     start = None
     for m, ts in zip(mask, index):
@@ -1545,20 +1661,45 @@ def _max_consecutive_true_duration(mask: Any,
     return max_dur
 
 
-def _detect_stuck_periods(
-    df_sorted: pd.DataFrame,
-    value_col: str = "customers_out",
-    timestamp_col: str = "run_start_time",
-    min_value: int = 1,
-    window_width: str = "24h",
-    duration_thresh: str = "14D",
-    floor_frac_thresh: float = 0.001,     # fraction of points near floor that indicates clipping
-    run_length_thresh: str = "1h",     # long consecutive time at floor
-    flatline_df=None) -> pd.DataFrame:
+def _detect_stuck_periods(df_sorted: pd.DataFrame,
+                          value_col: str = "customers_out",
+                          timestamp_col: str = "run_start_time",
+                          min_value: int = 1,
+                          window_width: str = "24h",
+                          duration_thresh: str = "14D",
+                          floor_frac_thresh: float = 0.001,     # fraction of points near floor that indicates clipping
+                          run_length_thresh: str = "1h",     # long consecutive time at floor
+                          flatline_df=None) -> pd.DataFrame:
     """
     Detect candidate clipped (left-censored) periods.
     Returns list of (start, end, diagnostics_dict).
     Diagnostics include floor_val, floor_fraction, max_run_time, next_val, gap.
+    
+    Parameters
+    ----------
+    df_sorted : pd.DataFrame
+        Input dataframe sorted by timestamp.
+    value_col : str
+        Column name for the values to analyze.
+    timestamp_col : str
+        Column name for the timestamps.
+    min_value : int
+        Minimum value threshold to consider for stuck detection.
+    window_width : str
+        Rolling window width for minimum calculation (e.g., "24h").
+    duration_thresh : str
+        Minimum duration threshold for stuck periods (e.g., "14D").
+    floor_frac_thresh : float
+        Fraction of points at floor to consider as clipping.
+    run_length_thresh : str
+        Minimum consecutive run length at floor to consider as clipping (e.g., "1h").
+    flatline_df : pd.DataFrame, optional
+        DataFrame of flatline periods to exclude from analysis.
+    
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame containing detected stuck anomalies with diagnostics.
     """
     df = df_sorted.copy()
     # exclude the flatline periods from the data
@@ -1671,10 +1812,17 @@ def detect_eaglei_data_issues(df: pd.DataFrame,
         Baseline for "stuck" detection.
     freq : str
         Expected reporting frequency (default 15min).
-    gap_quantile : float
-        Quantile for gap threshold (default 0.99).
-    stuck_quantile : float
-        Quantile for stuck duration threshold (default 0.95).
+    min_stuck_duration : str
+        Minimum duration for stuck detection (default 14D).
+    min_gap_duration : str
+        Minimum duration for missing data gap detection (default 3D).
+    min_flatline_duration : str
+        Minimum duration for flatline detection (default 3D).
+    
+    Returns
+    -------
+    Dict
+        Dictionary containing detected missing periods, stuck periods, and flatline periods.
     """
 
     df = df.copy()
@@ -1764,6 +1912,26 @@ def plot_eaglei_timeline(df: pd.DataFrame,
                          ma_window_length: str = "60D",
                          show_median: bool = False,
                          plot_type: str = "step") -> None:
+    """
+    Function to plot EAGLEi time series data with options for zero-filling, date range filtering,
+    log scale, moving average, median, and overlaying detected data issues.
+    
+    Parameters:
+        df: The input EAGLEi dataframe.
+        timestamp_col: The name of the timestamp column.
+        value_col: The name of the value column.
+        perform_zero_fill: Whether to perform zero-filling for missing timestamps.
+        date_range: A tuple of (start_date, end_date) to filter the data.
+        log_y_scale: Whether to use logarithmic scale for the y-axis.
+        overlay_issues: Whether to overlay detected data issues on the plot.
+        show_moving_average: Whether to show moving average on the plot.
+        ma_window_length: The window length for moving average (e.g., "60D" for 60 days).
+        show_median: Whether to show median line on the plot.
+        plot_type: Type of plot - "line", "scatter", or "step".
+    
+    Returns:
+        None
+    """
     
     if plot_type not in ["line", "scatter", "step"]:
         raise ValueError("plot_type must be one of 'line', 'scatter', or 'step'")
@@ -1898,6 +2066,24 @@ def create_stuck_periods_chart(eaglei_state_df: pd.DataFrame,
                                logx_axis: bool = False, 
                                logy_axis: bool = False,
                                filter_min_duration_days: int = 14):
+    """
+    Create a scatter plot of all stuck periods detected in the EAGLE-i data for each county.
+    
+    Parameters:
+    -----------
+    eaglei_state_df : pd.DataFrame
+        DataFrame containing EAGLE-i data for a specific state.
+    logx_axis : bool
+        Whether to use logarithmic scale for the x-axis.
+    logy_axis : bool
+        Whether to use logarithmic scale for the y-axis.
+    filter_min_duration_days : int
+        Minimum duration (in days) to filter stuck periods for plotting.
+
+    Returns:
+    --------
+    None
+    """
     all_stuck_periods = {}
     for c in eaglei_state_df['county'].unique():
         stuck_periods = detect_eaglei_data_issues(eaglei_state_df[eaglei_state_df['county'] == c])['stuck_periods']
@@ -2070,6 +2256,10 @@ def analyze_county_graph(G: nx.Graph) -> None:
     -----------
     G : networkx.Graph
         County adjacency graph
+
+    Returns:
+    --------
+    None
     """
     print(f"County Adjacency Graph Statistics:")
     print(f"Number of counties (nodes): {G.number_of_nodes()}")
@@ -2106,6 +2296,10 @@ def visualize_county_graph(G: nx.Graph, pos: Any = None, figsize: Tuple = (9, 6)
         Node positions for visualization
     figsize : tuple
         Figure size for the plot
+    
+    Returns:
+    --------
+    None
     """
     
     plt.figure(figsize=figsize)
@@ -2142,6 +2336,22 @@ def visualize_county_graph(G: nx.Graph, pos: Any = None, figsize: Tuple = (9, 6)
 
 
 def shortest_path_between_counties(G, county_a, county_b):
+    """
+    Find the shortest path between two counties in the adjacency graph.
+    
+    Parameters:
+    -----------
+    G : networkx.Graph
+        County adjacency graph
+    county_a : str
+        Starting county name
+    county_b : str
+        Ending county name
+    
+    Returns:
+    --------
+    None
+    """
     # Find the shortest path between two counties
     try:
         path = nx.shortest_path(G, county_a, county_b)
@@ -2163,6 +2373,7 @@ def find_time_overlapping_groups(df_with_all_counties: pd.DataFrame,
                                 new_event_col: str ='event_number_temporal') -> pd.DataFrame:
     """
     Identify and label overlapping events across multiple counties based only on time.
+    
     Parameters:
     -----------
     df_with_all_counties : pd.DataFrame
@@ -2171,6 +2382,7 @@ def find_time_overlapping_groups(df_with_all_counties: pd.DataFrame,
         Column name of the column containing county-level events' event numbers for each county.
     new_event_col : str
         Column name for the new temporal event numbers to be created.
+    
     Returns:
     --------
     pd.DataFrame
@@ -3251,6 +3463,7 @@ class EagleiStateProcessor:
         '''
         Add an additional edge to the county adjacency graph.
         Each edge is a tuple of two county names (county1, county2).
+        
         Parameters:
         -----------
         from_county : str
@@ -3261,6 +3474,7 @@ class EagleiStateProcessor:
             Weight of the edge (default: 0.0)
         border_length : float
             Length of the shared border in kilometers (default: 0.0)
+        
         Returns:
         --------
         None
@@ -3282,6 +3496,7 @@ class EagleiStateProcessor:
                                   ):
         '''
         Automatically process all counties in the state to identify gaps, fill gaps, and extract events.
+        
         Parameters:
         -----------
         min_customers_before_gap : int
@@ -3292,6 +3507,7 @@ class EagleiStateProcessor:
             Maximum gap duration in minutes to consider for filling (default: 1440 minutes = 1 day)
         ac_customers_threshold : int
             Customer threshold for event extraction (default: 30)
+        
         Returns:
         --------
         None
@@ -3347,10 +3563,14 @@ class EagleiStateProcessor:
     def save_spatiotemporal_event_plots(self, temporal_event_id: int, pdf_path: str|None = None):
         '''
         Save spatiotemporal event plots for all events in the state to a PDF file.
+
         Parameters:
         -----------
+        temporal_event_id : int
+            Temporal event ID to plot
         pdf_path : str
             Path to save the PDF file (default: None, which saves to 'RESULTS_DIR/spatiotemporal_events_{state_name}.pdf')
+        
         Returns:
         --------
         None
@@ -3369,6 +3589,28 @@ class EagleiStateProcessor:
                           graph_of_counties=self.county_adjacency_graph,
                           county_event_col=event_number_column,
                           pdf_path=pdf_path)
+        
+    def get_county_processor(self, county_name: str) -> EagleiCountyProcessor:
+        '''
+        Get the EagleiCountyProcessor instance for a specific county.
+        
+        Parameters:
+        -----------
+        county_name : str
+            Name of the county
+        
+        Returns:
+        --------
+        EagleiCountyProcessor
+            Instance of EagleiCountyProcessor for the specified county
+        '''
+        if county_name not in self.counties:
+            raise ValueError(f"County {county_name} not found in the counties list.")
+        return EagleiCountyProcessor(
+                eaglei_df=self.eaglei_df,
+                county_name=county_name,
+                verbose=self.verbose
+            )
 
 
 
@@ -3563,9 +3805,9 @@ class EagleiCountyProcessor:
         if (top_n <= 0) or (top_n > 100):
             raise ValueError("top_n must be a positive integer between 1 and 100.")
         
-        if (self.county_df_with_events is None) or (self.event_stats_ac is None):
-            raise ValueError("Events must be extracted before plotting.")
         if event_method == 'ac':
+            if (self.county_df_with_events is None) or (self.event_stats_ac is None):
+                raise ValueError("Events must be extracted before plotting.")
             top_n_event_numbers = self.event_stats_ac.sort_values(by='num_outages', ascending=False).iloc[0:top_n]['event_number'].tolist()
             plot_multiple_eaglei_performance_curves(self.county_df_with_events,
                                                     top_n_event_numbers,
