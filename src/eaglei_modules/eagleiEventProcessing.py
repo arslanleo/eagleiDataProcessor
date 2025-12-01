@@ -1,13 +1,13 @@
 """
-eventProcessing.py
+eagleiEventProcessing.py
 
 This module contains functions for processing EAGLE-I Data.
-It includes functions for processing outage events, extracting event numbers,
+It includes functions for processing outage events, extracting events,
 plotting performance curves, and building outage graphs.
 
 
 Author: Arslan Ahmad
-Last Updated: November 2025
+Last Updated: December 2025
 License: MIT
 """
 
@@ -315,8 +315,8 @@ def load_eaglei_state_data(state_name: str, verbose: int = 1) -> Tuple[pd.DataFr
 
 
 def clean_eaglei_data(eaglei_df: pd.DataFrame, 
-                      customer_column: str = 'customers_out',
-                      timestamp_column: str = 'run_start_time', 
+                      customer_column: str = constants.CUSTOMERS_COL,
+                      timestamp_column: str = constants.TIMESTAMP_COL, 
                       verbose: int = 1) -> pd.DataFrame:
     """
     Cleans EAGLE-i outage data by standardizing timestamps, removing zero customer outages,
@@ -326,9 +326,9 @@ def clean_eaglei_data(eaglei_df: pd.DataFrame,
     -----------
     eaglei_df : pd.DataFrame
         DataFrame containing EAGLE-i outage data
-    customer_column : str, default='customers_out'
+    customer_column : str, default=constants.CUSTOMERS_COL
         Name of the column containing customer outage counts
-    timestamp_column : str, default='run_start_time'
+    timestamp_column : str, default=constants.TIMESTAMP_COL
         Name of the column containing timestamps
     verbose : int, default=1
         Verbosity level for logging
@@ -397,8 +397,8 @@ def clean_eaglei_data(eaglei_df: pd.DataFrame,
 
 
 def identify_and_rank_time_gaps(df: pd.DataFrame, 
-                                timestamp_column: str = 'run_start_time', 
-                                customer_column: str = 'customers_out', 
+                                timestamp_column: str = constants.TIMESTAMP_COL, 
+                                customer_column: str = constants.CUSTOMERS_COL, 
                                 max_gap_minutes: int = (24*60), 
                                 min_customers_before_gap: int = 10, 
                                 min_customers_after_gap: int = 2, 
@@ -411,9 +411,9 @@ def identify_and_rank_time_gaps(df: pd.DataFrame,
     -----------
     df : pd.DataFrame
         DataFrame containing timestamp and customer data
-    timestamp_column : str, default='run_start_time'
+    timestamp_column : str, default=constants.TIMESTAMP_COL
         Name of the timestamp column
-    customer_column : str, default='customers_out'
+    customer_column : str, default=constants.CUSTOMERS_COL
         Name of the customer count column
     max_gap_minutes : int, default=24*60 (24 hours)
         Maximum gap duration in minutes to consider (gaps longer than this are ignored)
@@ -736,7 +736,7 @@ def visualize_gap_analysis(df: pd.DataFrame, rank_quantile: float | None = None)
 
 def fill_data_gaps_eaglei(eaglei_df: pd.DataFrame, 
                           gaps_df: pd.DataFrame, 
-                          timestamp_column: str = 'run_start_time', 
+                          timestamp_column: str = constants.TIMESTAMP_COL, 
                           rank_threshold: float = 0.35, 
                           verbose: int = 1) -> pd.DataFrame:
     """
@@ -756,7 +756,7 @@ def fill_data_gaps_eaglei(eaglei_df: pd.DataFrame,
         - 'timestamp_before': Timestamp before the gap
         - 'timestamp_after': Timestamp after the gap
         - 'rank': Rank of the gap based on its characteristics
-    timestamp_column : str, default='run_start_time'
+    timestamp_column : str, default=constants.TIMESTAMP_COL
         Name of the column containing timestamps
     rank_threshold : float, default=0.35
         Threshold for gap ranking to determine which gaps to fill
@@ -831,8 +831,8 @@ def fill_data_gaps_eaglei(eaglei_df: pd.DataFrame,
 
 
 def plot_eaglei_filled_gaps(df: pd.DataFrame, 
-                            customer_column: str = 'customers_out', 
-                            timestamp_column: str = 'run_start_time'):
+                            customer_column: str = constants.CUSTOMERS_COL, 
+                            timestamp_column: str = constants.TIMESTAMP_COL):
     """
     Plots the EAGLE-I outages data with a step plot and scatter points for original, filled, and missing data.
     This function is used to visualize the outages in the EAGLE-I dataset, before converting them to events and 
@@ -842,8 +842,8 @@ def plot_eaglei_filled_gaps(df: pd.DataFrame,
 
     Parameters:
     - df: DataFrame containing the EAGLE-I outages data.
-    - customer_column: Name of the column containing customer data (default is 'customers_out').
-    - timestamp_column: Name of the column containing timestamps (default is 'run_start_time').
+    - customer_column: Name of the column containing customer data (default is constants.CUSTOMERS_COL).
+    - timestamp_column: Name of the column containing timestamps (default is constants.TIMESTAMP_COL).
     """
     
     if len(df) == 0:
@@ -956,8 +956,8 @@ def extract_events_eaglei_ac(outage_df: pd.DataFrame,
         raise ValueError(f'{timestamp_column} column is missing in the DataFrame')
     
     # check if data is sorted by run_start_time
-    if not outage_df['run_start_time'].is_monotonic_increasing:
-        raise ValueError('Data is not sorted by run_start_time. Sort the data first!')
+    if not outage_df[timestamp_column].is_monotonic_increasing:
+        raise ValueError(f'Data is not sorted by {timestamp_column}. Sort the data first!')
     
     # check if filled_gap column exists
     if 'filled_gap' not in outage_df.columns:
@@ -1205,8 +1205,8 @@ def _get_eaglei_event_stats_single_event(eaglei_df: pd.DataFrame,
     Parameters:
         eaglei_df: the outage data frame
         event_number: the event number to get the statistics for
-        timestamp_column: the name of the timestamp column (default is 'run_start_time')
-        customer_column: the name of the customer column (default is 'customers_out')
+        timestamp_column: the name of the timestamp column (default is constants.TIMESTAMP_COL)
+        customer_column: the name of the customer column (default is constants.CUSTOMERS_COL)
         
     Returns:
         A dictionary with the following keys:
@@ -1915,7 +1915,7 @@ def create_stuck_periods_chart(eaglei_state_df: pd.DataFrame,
         print("No stuck periods detected.")
         return
 
-    state_name = eaglei_state_df['state'].iloc[0] if 'state' in eaglei_state_df.columns else 'Unknown'
+    state_name = eaglei_state_df[constants.STATE_COL].iloc[0] if constants.STATE_COL in eaglei_state_df.columns else 'Unknown'
     sns.displot(x='stuck_value', y='duration_days', 
                 data=all_stuck_periods_df, 
                 log_scale=(logx_axis, logy_axis), 
@@ -2520,7 +2520,7 @@ def _create_event_timeline(events_df,
             if event_start == event_end:
                 event_end = event_start + pd.Timedelta(minutes=15)
             
-            max_customers = event_data['customers_out'].max()
+            max_customers = event_data[constants.CUSTOMERS_COL].max()
             
             event_ranges.append({
                 'county': county,
@@ -2772,9 +2772,9 @@ def _create_eaglei_multicounty_performance_curve(events_df: pd.DataFrame,
         Event number to plot
     event_method : str, default='spatiotemporal'
         Method used for event detection (for labeling purposes)
-    timestamp_column : str, default='run_start_time'
+    timestamp_column : str, default=constants.TIMESTAMP_COL
         Column name for the timestamp
-    customer_column : str, default='customers_out'
+    customer_column : str, default=constants.CUSTOMERS_COL
         Column name for the customer count
 
     Returns:
@@ -2924,7 +2924,7 @@ def _create_eaglei_multicounty_performance_curve(events_df: pd.DataFrame,
     return fig
 
 
-def plot_eaglei_multicounty_performance_curve(events_df, event_number, event_method='spatiotemporal', timestamp_column='run_start_time', customer_column='customers_out'):
+def plot_eaglei_multicounty_performance_curve(events_df, event_number, event_method='spatiotemporal', timestamp_column=constants.TIMESTAMP_COL, customer_column=constants.CUSTOMERS_COL):
     # Create the figure
     fig = _create_eaglei_multicounty_performance_curve(events_df, event_number, event_method=event_method, timestamp_column=timestamp_column, customer_column=customer_column)
     # Display the figure
@@ -3182,7 +3182,11 @@ def save_plots_to_pdf(events_df,
                     verticalalignment='top', horizontalalignment='left',
                     transform=ax1.transAxes,
                     color='red', fontsize=10, alpha=1.0, fontstyle='normal', fontweight='bold')
-            _create_event_timeline(spatiotemporal_events, id, 'event_number_spatiotemporal', plotting_axis=ax2)
+            _create_event_timeline(events_df = spatiotemporal_events, 
+                                   event_id = id,
+                                   event_col_to_identify = 'event_number_spatiotemporal', 
+                                   event_col = county_event_col,
+                                   plotting_axis = ax2)
             plt.tight_layout()
             # plt.show(fig)       # display the figure of the original event
             pdf.savefig(fig)
