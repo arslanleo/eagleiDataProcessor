@@ -3432,7 +3432,7 @@ def save_plots_to_pdf(events_df,
     
     print(f"Saved plots to {pdf_path}")
 
-    save_spatiotemporal_event_curves(spatiotemporal_events, temporal_event_id=event_id)
+    # save_spatiotemporal_event_curves(spatiotemporal_events, temporal_event_id=event_id)
 
 
 # ------------------------- Public API for EagleiStateProcessor -------------------------
@@ -3579,17 +3579,217 @@ class EagleiStateProcessor:
             raise ValueError("No events data found. Please run auto_process_all_counties() first.")
         
         # check if the event id exists in the all_counties_events_df
-        event_number_column = f'event_number_ac_threshold_{self.ac_customers_threshold}'
-        if temporal_event_id not in self.all_counties_events_df[event_number_column].unique():
+        if temporal_event_id not in self.all_counties_events_df['event_number_temporal'].unique():
             raise ValueError(f"Temporal event ID {temporal_event_id} not found in the events data.")
         
-        save_plots_to_pdf(self.all_counties_events_df, 
-                          event_id=temporal_event_id, 
-                          overlap_method='standard_overlap', 
-                          graph_of_counties=self.county_adjacency_graph,
-                          county_event_col=event_number_column,
-                          pdf_path=pdf_path)
+        event_number_column = f'event_number_ac_threshold_{self.ac_customers_threshold}'
+        save_plots_to_pdf(events_df = self.all_counties_events_df, 
+                          event_id = temporal_event_id, 
+                          overlap_method = 'standard_overlap', 
+                          graph_of_counties = self.county_adjacency_graph,
+                          county_event_col = event_number_column,
+                          pdf_path = pdf_path)
         
+    def get_spatiotemporal_events(self, temporal_event_id: int) -> pd.DataFrame:
+        '''
+        Get the spatiotemporal events for a specific temporal event ID.
+
+        Parameters:
+        -----------
+        temporal_event_id : int
+            Temporal event ID to get spatiotemporal events for
+        
+        Returns:
+        --------
+        pd.DataFrame
+            DataFrame containing spatiotemporal events
+        '''
+        if self.all_counties_events_df.empty:
+            raise ValueError("No events data found. Please run auto_process_all_counties() first.")
+        
+        # check if the event id exists in the all_counties_events_df
+        if temporal_event_id not in self.all_counties_events_df['event_number_temporal'].unique():
+            raise ValueError(f"Temporal event ID {temporal_event_id} not found in the events data.")
+        
+        event_number_column = f'event_number_ac_threshold_{self.ac_customers_threshold}'
+        
+        spatiotemporal_events = segregate_by_space(events_df = self.all_counties_events_df, 
+                                                   temporal_event_number = temporal_event_id,
+                                                   temporal_event_col='event_number_temporal', 
+                                                   county_event_col=event_number_column,
+                                                   graph_of_counties=self.county_adjacency_graph,
+                                                   time_overlap_method='standard_overlap')
+        return spatiotemporal_events
+    
+    def view_event_map_temporal(self, temporal_event_id: int):
+        '''
+        View the event map for a specific temporal event ID.
+
+        Parameters:
+        -----------
+        temporal_event_id : int
+            Temporal event ID to plot
+        
+        Returns:
+        --------
+        None
+        '''
+        if self.all_counties_events_df.empty:
+            raise ValueError("No events data found. Please run auto_process_all_counties() first.")
+        
+        # check if the event id exists in the all_counties_events_df
+        if temporal_event_id not in self.all_counties_events_df['event_number_temporal'].unique():
+            raise ValueError(f"Temporal event ID {temporal_event_id} not found in the events data.")
+        
+        event_number_column = f'event_number_ac_threshold_{self.ac_customers_threshold}'
+        plot_event_on_map(events_df = self.all_counties_events_df, 
+                          event_id = temporal_event_id, 
+                          event_col='event_number_temporal',
+                          county_wide_events_col=event_number_column,
+                          state_fips_code=self.state_fips_code)
+        
+    def view_event_map_spatiotemporal(self, temporal_event_id: int, spatiotemporal_event_id: int):
+        '''
+        View the event map for a specific spatiotemporal event ID.
+
+        Parameters:
+        -----------
+        temporal_event_id : int
+            Temporal event ID to get spatiotemporal events for
+        spatiotemporal_event_id : int
+            Spatiotemporal event ID to plot
+        
+        Returns:
+        --------
+        None
+        '''
+        if self.all_counties_events_df.empty:
+            raise ValueError("No events data found. Please run auto_process_all_counties() first.")
+        
+        # get the spatiotemporal events for the given temporal event id
+        spatiotemporal_events = self.get_spatiotemporal_events(temporal_event_id)
+        
+        # check if the event id exists in the all_counties_events_df
+        if spatiotemporal_event_id not in spatiotemporal_events['event_number_spatiotemporal'].unique():
+            raise ValueError(f"Spatiotemporal event ID {spatiotemporal_event_id} not found in the events data.")
+        
+        event_number_column = f'event_number_ac_threshold_{self.ac_customers_threshold}'
+        plot_event_on_map(events_df = spatiotemporal_events, 
+                          event_id = spatiotemporal_event_id, 
+                          event_col='event_number_spatiotemporal',
+                          county_wide_events_col=event_number_column,
+                          state_fips_code=self.state_fips_code)
+        
+    def view_event_timeline_temporal(self, temporal_event_id: int):
+        '''
+        View the event timeline for a specific temporal event ID.
+
+        Parameters:
+        -----------
+        temporal_event_id : int
+            Temporal event ID to plot
+        
+        Returns:
+        --------
+        None
+        '''
+        if self.all_counties_events_df.empty:
+            raise ValueError("No events data found. Please run auto_process_all_counties() first.")
+        
+        # check if the event id exists in the all_counties_events_df
+        if temporal_event_id not in self.all_counties_events_df['event_number_temporal'].unique():
+            raise ValueError(f"Temporal event ID {temporal_event_id} not found in the events data.")
+        
+        event_number_column = f'event_number_ac_threshold_{self.ac_customers_threshold}'
+        plot_event_timeline(events_df = self.all_counties_events_df, 
+                            event_id = temporal_event_id, 
+                            event_col_to_identify='event_number_temporal',
+                            event_col=event_number_column)
+
+    def view_event_timeline_spatiotemporal(self, temporal_event_id: int, spatiotemporal_event_id: int):
+        '''
+        View the event timeline for a specific spatiotemporal event ID.
+
+        Parameters:
+        -----------
+        temporal_event_id : int
+            Temporal event ID to get spatiotemporal events for
+        spatiotemporal_event_id : int
+            Spatiotemporal event ID to plot
+        
+        Returns:
+        --------
+        None
+        '''
+        if self.all_counties_events_df.empty:
+            raise ValueError("No events data found. Please run auto_process_all_counties() first.")
+        
+        # get the spatiotemporal events for the given temporal event id
+        spatiotemporal_events = self.get_spatiotemporal_events(temporal_event_id)
+        
+        # check if the event id exists in the all_counties_events_df
+        if spatiotemporal_event_id not in spatiotemporal_events['event_number_spatiotemporal'].unique():
+            raise ValueError(f"Spatiotemporal event ID {spatiotemporal_event_id} not found in the events data.")
+        
+        event_number_column = f'event_number_ac_threshold_{self.ac_customers_threshold}'
+        plot_event_timeline(events_df = spatiotemporal_events, 
+                            event_id = spatiotemporal_event_id, 
+                            event_col_to_identify='event_number_spatiotemporal',
+                            event_col=event_number_column)
+
+    def view_performance_curve_temporal(self, temporal_event_id: int):
+        '''
+        View the multicounty performance curve for a specific temporal event ID.
+
+        Parameters:
+        -----------
+        temporal_event_id : int
+            Temporal event ID to plot
+        
+        Returns:
+        --------
+        None
+        '''
+        if self.all_counties_events_df.empty:
+            raise ValueError("No events data found. Please run auto_process_all_counties() first.")
+        
+        # check if the event id exists in the all_counties_events_df
+        if temporal_event_id not in self.all_counties_events_df['event_number_temporal'].unique():
+            raise ValueError(f"Temporal event ID {temporal_event_id} not found in the events data.")
+        
+        plot_eaglei_multicounty_performance_curve(events_df = self.all_counties_events_df, 
+                                                  event_number = temporal_event_id, 
+                                                  event_method='temporal')
+        
+    def view_performance_curve_spatiotemporal(self, temporal_event_id: int, spatiotemporal_event_id: int):
+        '''
+        View the performance curve for a specific spatiotemporal event ID.
+
+        Parameters:
+        -----------
+        temporal_event_id : int
+            Temporal event ID to get spatiotemporal events for
+        spatiotemporal_event_id : int
+            Spatiotemporal event ID to plot
+        
+        Returns:
+        --------
+        None
+        '''
+        if self.all_counties_events_df.empty:
+            raise ValueError("No events data found. Please run auto_process_all_counties() first.")
+        
+        # get the spatiotemporal events for the given temporal event id
+        spatiotemporal_events = self.get_spatiotemporal_events(temporal_event_id)
+        
+        # check if the event id exists in the all_counties_events_df
+        if spatiotemporal_event_id not in spatiotemporal_events['event_number_spatiotemporal'].unique():
+            raise ValueError(f"Spatiotemporal event ID {spatiotemporal_event_id} not found in the events data.")
+        
+        plot_eaglei_multicounty_performance_curve(events_df = spatiotemporal_events, 
+                                                  event_number = spatiotemporal_event_id, 
+                                                  event_method='spatiotemporal')
+
     def get_county_processor(self, county_name: str) -> EagleiCountyProcessor:
         '''
         Get the EagleiCountyProcessor instance for a specific county.
