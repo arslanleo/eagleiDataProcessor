@@ -35,6 +35,9 @@ import networkx as nx
 import geopandas as gpd
 import json
 from urllib.request import urlopen
+from matplotlib.backends.backend_pdf import PdfPages
+import plotly.graph_objects as go
+import plotly.express as px
 
 from . import constants
 from pandas.api.types import is_datetime64_any_dtype
@@ -56,7 +59,7 @@ custom_label_formatter = CustomScalarFormatter(useMathText=True)
 
 # ------------------------- Data Cleaning Functions -------------------------
 
-def verify_eaglei_files(verbose=1) -> list[str]:
+def verify_eaglei_files(verbose: int = 1) -> list[str]:
     """
     Verify the presence of essential EAGLEi data files in the specified directory.
 
@@ -82,10 +85,6 @@ def verify_eaglei_files(verbose=1) -> list[str]:
     pattern = r'^eaglei_outages_\d{4}'
     eaglei_files = [f for f in os.listdir(dir_path) if re.match(pattern, f)]
 
-    # # Filter files that start with 'eaglei_outages_' followed by exactly 4 digits (year)
-    # pattern = r'^eaglei_outages_\d{4}'
-    # eaglei_files = [f for f in files if re.match(pattern, f)]
-
     if len(eaglei_files) == 0:
         raise FileNotFoundError("No EAGLEi outage data files found.")
 
@@ -103,30 +102,48 @@ def verify_eaglei_files(verbose=1) -> list[str]:
     return eaglei_files
 
 
-
-def clean_eaglei_state_data(state_name: str) -> pd.DataFrame:
+def load_eaglei_state_data(state_name: str, verbose: int = 1) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Function to read and clean EAGLEi outage data for a specific state.
 
+    There are differences in column names in the EAGLE-I files for different years.
+    This function identify those and standardizes the data into a consistent format.
+    And store the cleaned file in a parquet file which takes sgignificantly less space and is faster to read.
+
+    Columns From 2014 to 2020 fips_code, county, state, sum, run_start_time  
+    Columns From 2021 to 2022 fips_code, county, state, customers_out, run_start_time (sum is replaced with customers_out)  
+    Columns in 2023 fips_code, county, state, sum, run_start_time  (again started using sum instead of customers_out)  
+    Columns in 2024 fips_code, county, state, customers_out, run_start_time, total_customers (sum is replaced with customers_out)  
+    
+    Additionally, the total_customers column is placed in the individual EAGLE-I outage files
+    instead of a seperate file. So this function seperate that information and stores it in a seperate file.
+
     Args:
         state_name (str): The name of the state to filter the data.
+        verbose (int): If 1, prints progress and information messages.
     
     Returns:
-        pd.DataFrame: Cleaned DataFrame containing outage data for the specified state.
+        Tuple[pd.DataFrame, pd.DataFrame]: A tuple containing two DataFrames:
+            - Cleaned DataFrame containing outage data for the specified state.
+            - DataFrame containing total customers data for counties in the specified state.
 
     Raises:
         FileNotFoundError: If any of the specified EAGLE-I files do not exist.
         ValueError: If no data is found for the specified state.
     """
 
+    # ==================== Reading and Filtering Data ====================
     cwd = os.getcwd()
     output_file_name = f"eaglei_cleaned_{state_name.lower()}.parquet"
+    output_county_total_customers_file_name = f"county_total_customers_in_{state_name.lower()}.parquet"
+    
     # check if the file already exists
-    if os.path.isfile(os.path.join(cwd, constants.EAGLEI_DATA_DIR, output_file_name)):
+    if os.path.isfile(os.path.join(cwd, constants.PROCESSED_DATA_DIR, output_file_name)):
         print(f"Cleaned data for {state_name} already exists as {output_file_name}. Loading the existing file...")
         try:
-            data_df = pd.read_parquet(os.path.join(cwd, constants.EAGLEI_DATA_DIR, output_file_name))
-            return data_df
+            data_df = pd.read_parquet(os.path.join(cwd, constants.PROCESSED_DATA_DIR, output_file_name))
+            county_total_customers = pd.read_parquet(os.path.join(cwd, constants.PROCESSED_DATA_DIR, output_county_total_customers_file_name))
+            return data_df, county_total_customers
         except Exception as e:
             print(f"Error loading existing cleaned data: {e}")
             print("Proceeding to re-clean the data...")
@@ -143,9 +160,9 @@ def clean_eaglei_state_data(state_name: str) -> pd.DataFrame:
         temp_df = pd.read_csv(file)
         
         # check if the state name exists in the 'state' column
-        if state_name in temp_df['state'].values:
+        if state_name in temp_df[constants.STATE_COL].values:
             # append the filtered data to the main DataFrame
-            data_df = pd.concat([data_df, temp_df[temp_df['state'] == state_name]], ignore_index=True)
+            data_df = pd.concat([data_df, temp_df[temp_df[constants.STATE_COL] == state_name]], ignore_index=True)
 
     # check if the DataFrame is empty
     if data_df.empty:
@@ -153,55 +170,58 @@ def clean_eaglei_state_data(state_name: str) -> pd.DataFrame:
     
     print(f"Total records for {state_name} (before cleaning): {data_df.shape[0]}\n")
 
+    # ==================== Consolidating Columns ====================
+
+    # convert the run_start_time column to datetime
+    data_df[constants.TIMESTAMP_COL] = pd.to_datetime(data_df[constants.TIMESTAMP_COL], errors='raise')
+    
     # Add a year column to the DataFrame
     # This will help in grouping the data by year later on
-    data_df['year'] = pd.to_datetime(data_df['run_start_time']).dt.year
+    data_df[constants.YEAR_COL] = data_df[constants.TIMESTAMP_COL].dt.year
         
     # Verify the relationship between 'sum' and 'customers_out' columns
-    print("=== Verifying Relationship between 'sum' and 'customers_out' columns ===")
+    print(f"=== Verifying Relationship between 'sum' and {constants.CUSTOMERS_COL} columns ===")
 
     # Check if when 'sum' is not NaN, 'customers_out' is NaN and vice versa
     sum_not_nan = data_df['sum'].notna()
-    customers_out_not_nan = data_df['customers_out'].notna()
+    customers_out_not_nan = data_df[constants.CUSTOMERS_COL].notna()
 
     print(f"Rows with non-NaN 'sum': {sum_not_nan.sum()}")
-    print(f"Rows with non-NaN 'customers_out': {customers_out_not_nan.sum()}")
+    print(f"Rows with non-NaN {constants.CUSTOMERS_COL}: {customers_out_not_nan.sum()}")
 
     # Check the mutual exclusivity
     both_not_nan = sum_not_nan & customers_out_not_nan
     both_nan = (~sum_not_nan) & (~customers_out_not_nan)
 
-    print(f"\nRows where both 'sum' and 'customers_out' are not NaN: {both_not_nan.sum()}")
-    print(f"Rows where both 'sum' and 'customers_out' are NaN: {both_nan.sum()}")
+    print(f"\nRows where both 'sum' and {constants.CUSTOMERS_COL} are not NaN: {both_not_nan.sum()}")
+    print(f"Rows where both 'sum' and {constants.CUSTOMERS_COL} are NaN: {both_nan.sum()}")
 
     # Check by year to see the pattern
     print(f"\n=== Breakdown by year ===")
-    year_breakdown = data_df.groupby('year').agg({
+    year_breakdown = data_df.groupby(constants.YEAR_COL).agg({
         'sum': lambda x: x.notna().sum(),
-        'customers_out': lambda x: x.notna().sum()
-    }).rename(columns={'sum': 'sum_non_nan_count', 'customers_out': 'customers_out_non_nan_count'})
+        constants.CUSTOMERS_COL: lambda x: x.notna().sum()
+    }).rename(columns={'sum': 'sum_non_nan_count', constants.CUSTOMERS_COL: 'customers_out_non_nan_count'})
 
     print(year_breakdown)
 
     # Verify the hypothesis: when sum is not NaN, customers_out should be NaN and vice versa
     if both_not_nan.sum() == 0:
-        print(f"\nVERIFIED: 'sum' and 'customers_out' are mutually exclusive (no rows have both values)")
+        print(f"\nVERIFIED: 'sum' and {constants.CUSTOMERS_COL} are mutually exclusive (no rows have both values)")
     else:
-        print(f"\nWARNING: Found {both_not_nan.sum()} rows where both 'sum' and 'customers_out' have values")
+        print(f"\nWARNING: Found {both_not_nan.sum()} rows where both 'sum' and {constants.CUSTOMERS_COL} have values")
         print("Sample rows with both values:")
-        print(data_df[both_not_nan][['year', 'sum', 'customers_out']].head())
-
+        print(data_df[both_not_nan][['year', 'sum', constants.CUSTOMERS_COL]].head())
     if both_nan.sum() == 0:
-        print(f"VERIFIED: No rows have both 'sum' and 'customers_out' as NaN")
+        print(f"VERIFIED: No rows have both 'sum' and {constants.CUSTOMERS_COL} as NaN")
     else:
-        print(f"WARNING: Found {both_nan.sum()} rows where both 'sum' and 'customers_out' are NaN")
-
+        print(f"WARNING: Found {both_nan.sum()} rows where both 'sum' and {constants.CUSTOMERS_COL} are NaN")
 
     # Create a temporary consolidated column that combines 'sum' and 'customers_out'
-    print("\n=== Consolidating 'sum' and 'customers_out' columns ===")
+    print(f"\n=== Consolidating 'sum' and {constants.CUSTOMERS_COL} columns ===")
 
     # Use 'sum' values where available, otherwise use 'customers_out' values
-    data_df['outages'] = data_df['sum'].fillna(data_df['customers_out'])
+    data_df['outages'] = data_df['sum'].fillna(data_df[constants.CUSTOMERS_COL])
 
     # Check for remaining NaN values before converting to integer
     nan_count = data_df['outages'].isna().sum()
@@ -230,14 +250,69 @@ def clean_eaglei_state_data(state_name: str) -> pd.DataFrame:
     # rename the 'outages' column to CUSTOMERS_COL
     data_df = data_df.rename(columns={'outages': constants.CUSTOMERS_COL})
 
-    # export the cleaned data to a parquet file
+    # ==================== Separating the total_customers column ====================
+    
+    county_total_customers = data_df.loc[:, ['fips_code', 'county', 'total_customers']].copy()
+    county_total_customers.dropna(subset=['total_customers'], inplace=True)
+    county_total_customers.drop_duplicates(subset=['county', 'total_customers'], inplace=True)
+    county_total_customers['total_customers'] = county_total_customers['total_customers'].astype(int)
+    county_total_customers.sort_values(by='total_customers', ascending=False, inplace=True)
+    county_total_customers.reset_index(drop=True, inplace=True)
+    
+    # remove the total_customers column as it is no longer needed
+    data_df = data_df.drop(columns=['total_customers'], inplace=False)
+
+    # ==================== Clean the data ====================
+
+    # Check if the data is sorted by timestamp_column
+    if not data_df[constants.TIMESTAMP_COL].is_monotonic_increasing:
+        if verbose > 0:
+            print(f'Data was not sorted by {constants.TIMESTAMP_COL}, sorting the data...')
+        data_df = data_df.sort_values(by=constants.TIMESTAMP_COL).reset_index(drop=True)
+
+    # Standardize timestamps to 15-minute intervals
+    invalid_times = data_df[~(data_df[constants.TIMESTAMP_COL].dt.minute.isin([0, 15, 30, 45]))]
+    if invalid_times.shape[0] > 0:
+        if verbose > 0:
+            print('There are invalid times in the data:', invalid_times.shape[0])
+            print('  Fixing the invalid times...')
+        data_df[constants.TIMESTAMP_COL] = data_df[constants.TIMESTAMP_COL].apply(
+            lambda x: x.replace(minute=(x.minute // 15) * 15, second=0)
+        )
+        if verbose > 0:
+            print('  Invalid times fixed.')
+
+    # Fix seconds to zero
+    invalid_seconds = data_df[data_df[constants.TIMESTAMP_COL].dt.second != 0]
+    if invalid_seconds.shape[0] > 0:
+        if verbose > 0:
+            print('There are invalid seconds in the data:', invalid_seconds.shape[0])
+            print('  Fixing the invalid seconds...')
+        data_df[constants.TIMESTAMP_COL] = data_df[constants.TIMESTAMP_COL].apply(lambda x: x.replace(second=0))
+        if verbose > 0:
+            print('  Invalid seconds fixed.')
+
+    # Remove zero customer outages initially (we'll handle gaps separately)
+    if data_df[data_df[constants.CUSTOMERS_COL] == 0].shape[0] > 0:
+        if verbose > 0:
+            print(f'There are {data_df[data_df[constants.CUSTOMERS_COL] == 0].shape[0]} records where {constants.CUSTOMERS_COL} == 0')
+            print(f'  Removing the {constants.CUSTOMERS_COL} == 0 records...')
+        data_df = data_df[data_df[constants.CUSTOMERS_COL] != 0].reset_index(drop=True)
+        if verbose > 0:
+            print(f'  Records removed with {constants.CUSTOMERS_COL} == 0.')
+
+    # ==================== Export Cleaned Data ====================
+
     try:
-        data_df.to_parquet(os.path.join(cwd, constants.EAGLEI_DATA_DIR, output_file_name), index=False)
+        data_df.to_parquet(os.path.join(cwd, constants.PROCESSED_DATA_DIR, output_file_name), index=False)
+        county_total_customers.to_parquet(os.path.join(cwd, constants.PROCESSED_DATA_DIR, output_county_total_customers_file_name), index=False)
         print(f"\nCleaned data saved to {output_file_name}")
+        print(f"and county total customers data saved to {output_county_total_customers_file_name}")
     except Exception as e:
         print(f"Error saving cleaned data: {e}")
     
-    return data_df
+    return data_df, county_total_customers
+
 
 def clean_eaglei_data(eaglei_df: pd.DataFrame, 
                       customer_column: str = 'customers_out',
@@ -862,7 +937,7 @@ def plot_eaglei_filled_gaps(df: pd.DataFrame,
 
 def extract_events_eaglei_ac(outage_df: pd.DataFrame, 
                              time_delta: int = 15, 
-                             timestamp_column: str = 'run_start_time') -> pd.DataFrame:
+                             timestamp_column: str = constants.TIMESTAMP_COL) -> pd.DataFrame:
     """
     Extract outage events from the EAGLE-I dataset using the AC method.
     This is the very basic version of the event extraction, which simply groups the outages into events based on a missing 15-minute interval.
@@ -911,8 +986,8 @@ def extract_events_eaglei_ac(outage_df: pd.DataFrame,
 def extract_events_eaglei_ac_threshold(outage_df: pd.DataFrame,
                                         customer_threshold: int = 10,
                                         time_delta: str = "15min",
-                                        timestamp_column: str = "run_start_time",
-                                        customer_column: str = "customers_out",
+                                        timestamp_column: str = constants.TIMESTAMP_COL,
+                                        customer_column: str = constants.CUSTOMERS_COL,
                                         active_only: bool = False,
                                         crossing_mode: str = "both") -> pd.DataFrame:
     """
@@ -990,8 +1065,8 @@ def extract_events_eaglei_ac_threshold(outage_df: pd.DataFrame,
 
 
 def count_crossings(df: pd.DataFrame,
-                    value_col: str = "customers_out",
-                    timestamp_col: str = "run_start_time",
+                    value_col: str = constants.CUSTOMERS_COL,
+                    timestamp_col: str = constants.TIMESTAMP_COL,
                     threshold: int = 0,
                     crossing: str = "down") -> int:
     """
@@ -1074,8 +1149,8 @@ def count_crossings(df: pd.DataFrame,
 def get_eaglei_processes(outage_df: pd.DataFrame, 
                          event_number: int, 
                          event_method: str = 'ac', 
-                         timestamp_column: str = 'run_start_time', 
-                         customer_column: str = 'customers_out') -> Tuple[List, List, List]:
+                         timestamp_column: str = constants.TIMESTAMP_COL, 
+                         customer_column: str = constants.CUSTOMERS_COL) -> Tuple[List, List, List]:
 
     event_column = f'event_number_{event_method}'
     event_data = outage_df[outage_df[event_column] == event_number].copy()
@@ -1122,8 +1197,8 @@ def get_eaglei_processes(outage_df: pd.DataFrame,
 def _get_eaglei_event_stats_single_event(eaglei_df: pd.DataFrame, 
                                          event_number: int, 
                                          event_method: str = 'ac', 
-                                         timestamp_column: str = 'run_start_time', 
-                                         customer_column: str = 'customers_out') -> Dict:
+                                         timestamp_column: str = constants.TIMESTAMP_COL, 
+                                         customer_column: str = constants.CUSTOMERS_COL) -> Dict:
     """
     Function to get the statistics of a given event number
     
@@ -1190,8 +1265,8 @@ def _get_eaglei_event_stats_single_event(eaglei_df: pd.DataFrame,
 def get_eaglei_event_stats(eaglei_df: pd.DataFrame, 
                            event_numbers: Any, 
                            event_method: str = 'ac', 
-                           timestamp_column: str = 'run_start_time', 
-                           customer_column: str = 'customers_out') -> pd.DataFrame | Dict:
+                           timestamp_column: str = constants.TIMESTAMP_COL, 
+                           customer_column: str = constants.CUSTOMERS_COL) -> pd.DataFrame | Dict:
     if len(event_numbers) == 1:
         return _get_eaglei_event_stats_single_event(eaglei_df, event_numbers[0], event_method, timestamp_column, customer_column)
     else:
@@ -1212,8 +1287,8 @@ def get_eaglei_event_stats(eaglei_df: pd.DataFrame,
 def plot_eaglei_event_curves(outage_df: pd.DataFrame, 
                              event_number: int, 
                              event_method: str = 'ac', 
-                             timestamp_column: str = 'run_start_time', 
-                             customer_column: str = 'customers_out') -> None:
+                             timestamp_column: str = constants.TIMESTAMP_COL, 
+                             customer_column: str = constants.CUSTOMERS_COL) -> None:
     """
     Function to plot the outage and restore processes for a given event number
     
@@ -1250,13 +1325,6 @@ def plot_eaglei_event_curves(outage_df: pd.DataFrame,
     plt.title('Outage and Restore Processes for EAGLE-i Event Number: ' + str(event_number) + ' with ' + str(len(outage_process)-2) +' outages (' + event_method.upper() + ')')
     plt.legend()
     plt.axhline(y=0, color='black', linewidth=0.5)  # show a horizontal line at 0
-    # # Format x-axis for better readability
-    # xtick_locator = mdates.AutoDateLocator()  # Automatically adjust ticks
-    # xtick_formatter = mdates.DateFormatter('%m-%d-%y\n%H:%M')
-    # plt.gca().xaxis.set_major_locator(xtick_locator)
-    # plt.gca().xaxis.set_major_formatter(xtick_formatter)
-    # # Show x-axis ticks every hour
-    # plt.gca().xaxis.set_tick_params(left=True, labelleft=True)
 
     # Format x-axis for better readability
     xtick_formatter = mdates.DateFormatter('%m-%d-%y\n%H:%M')
@@ -1275,8 +1343,8 @@ def plot_eaglei_event_curves(outage_df: pd.DataFrame,
 def plot_eaglei_log_performance(outage_df: pd.DataFrame, 
                                 event_number: int, 
                                 event_method: str = 'ac', 
-                                timestamp_column: str = 'run_start_time', 
-                                customer_column: str = 'customers_out') -> None:
+                                timestamp_column: str = constants.TIMESTAMP_COL, 
+                                customer_column: str = constants.CUSTOMERS_COL) -> None:
     """
     Function to plot the outage and restore processes for a given event number
     
@@ -1295,7 +1363,7 @@ def plot_eaglei_log_performance(outage_df: pd.DataFrame,
 
     # create a step plot of the outages
     plt.figure(figsize=(18,7))
-    plt.step([row[0] for row in performance_process], [row[1] for row in performance_process], where='post', label='Performance Curve', color=color_performance_curve, linewidth=1.5, zorder=3)
+    plt.step([row[0] for row in performance_process], [row[1] for row in performance_process], where='post', label='Performance Curve', color=constants.COLOR_PERFORMANCE_CURVE, linewidth=1.5, zorder=3)
     plt.ylabel('Number of Customers (log scale)')
     plt.xlabel('Time')
     plt.title('Outage and Restore Processes for EAGLE-i Event Number: ' + str(event_number) + ' with ' + str(len(outages)) +' outages (' + event_method.upper() + ')')
@@ -1319,8 +1387,8 @@ def plot_eaglei_log_performance(outage_df: pd.DataFrame,
 def plot_multiple_eaglei_performance_curves(outage_df: pd.DataFrame, 
                                             event_numbers: List[int], 
                                             event_method: str = 'ac', 
-                                            timestamp_column: str = 'run_start_time', 
-                                            customer_column: str = 'customers_out') -> None:
+                                            timestamp_column: str = constants.TIMESTAMP_COL, 
+                                            customer_column: str = constants.CUSTOMERS_COL) -> None:
     """
     Function to plot the outage and restore processes for multiple event numbers in subplots of 5x10
     
@@ -1367,14 +1435,6 @@ def plot_multiple_eaglei_performance_curves(outage_df: pd.DataFrame,
         ax.set_title(f'Event Number: {event_number} ({len(outage_process)-2} outages)', fontsize=12)
         # ax.legend()
         ax.axhline(y=0, color='black', linewidth=0.5)  # show a horizontal line at 0
-        # # Format x-axis for better readability
-        # xtick_locator = mdates.AutoDateLocator()  # Automatically adjust ticks
-        # xtick_formatter = mdates.DateFormatter('%m-%d\n%H:%M')
-        # ax.xaxis.set_major_locator(xtick_locator)
-        # ax.xaxis.set_major_formatter(xtick_formatter)
-        # # Show x-axis ticks every hour
-        # ax.xaxis.set_tick_params(left=True, labelleft=True)
-
 
         # Format x-axis for better readability
         xtick_formatter = mdates.DateFormatter('%m-%d-%y\n%H:%M')
@@ -1880,20 +1940,32 @@ def create_stuck_periods_chart(eaglei_state_df: pd.DataFrame,
 # ------------------------- County Adjacency Graphs -------------------------
 
 
-def load_counties_shapefile(shapefile_url: str = 'https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json') -> dict | None:
+def load_counties_shapefile(shapefile_path: str = os.path.join(os.getcwd(), constants.MISC_DIR, 'geojson-counties-fips.json'),
+                            shapefile_url: str = 'https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json') -> dict | None:
     """
-    Loads county shapefile data from a GeoJSON URL.
+    Loads county shapefile data from a GeoJSON URL or local file.
     
     Parameters:
     -----------
     shapefile_url : str
         URL to the GeoJSON file containing county boundaries
+    shapefile_path : str
+        Local path to the GeoJSON file containing county boundaries
 
     Returns:
     --------
     counties_shape_data : dict
         GeoJSON FeatureCollection containing county boundaries
     """
+    # First try to load from local file
+    if os.path.exists(shapefile_path):
+        try:
+            with open(shapefile_path, 'r') as f:
+                counties_shape_data = json.load(f)
+            return counties_shape_data
+        except Exception as e:
+            print(f"Error loading county shapefile from local file: {e}")
+    # If local file not found or failed, try to load from URL
     try:
         with urlopen(shapefile_url) as response:
             counties_shape_data = json.load(response)
@@ -1948,7 +2020,7 @@ def create_county_adjacency_graph(state_fips_prefix: str | None = None) -> nx.Gr
     G = nx.Graph()
     
     # Add all counties as nodes
-    for idx, row in gdf.iterrows():
+    for _, row in gdf.iterrows():
         county_name = row['NAME']
         G.add_node(county_name, 
                    fips_code=row['GEO_ID'],
@@ -2084,17 +2156,1228 @@ def shortest_path_between_counties(G, county_a, county_b):
         print(f"County not found: {e}")
 
 
+# ------------------------- Spatiotemporal Events Extraction -------------------------
 
-# ------------------------- Public API -------------------------
+def find_time_overlapping_groups(df_with_all_counties: pd.DataFrame, 
+                                event_col: str ='event_number_ac_threshold_30', 
+                                new_event_col: str ='event_number_temporal') -> pd.DataFrame:
+    """
+    Identify and label overlapping events across multiple counties based only on time.
+    Parameters:
+    -----------
+    df_with_all_counties : pd.DataFrame
+        DataFrame containing event data for multiple counties of a single state.
+    event_col : str
+        Column name of the column containing county-level events' event numbers for each county.
+    new_event_col : str
+        Column name for the new temporal event numbers to be created.
+    Returns:
+    --------
+    pd.DataFrame
+        DataFrame with an additional column for temporal event numbers.
+    """
+
+    # create new columns using each county's event_number_ac_threshold_30 values
+    df_pivot = df_with_all_counties.pivot_table(index=constants.TIMESTAMP_COL, columns=constants.COUNTY_COL, values=event_col, fill_value=0)
+    # modify the frequency of the index to 15 minutes and fill missing timestamps with 0
+    df_pivot = df_pivot.asfreq('15min').fillna(0)
+    # change all column types to integers
+    df_pivot = df_pivot.astype(int)
+    # replace all the non-zero values with 1
+    df_pivot[df_pivot > 0] = 1
+    # create a new column with the sum of each row
+    # this column basically tells you the total number of overlaping events in all the counties at each timestamp
+    df_pivot[new_event_col] = df_pivot.sum(axis=1)
+    # replace values greater than 0 with 1
+    # df_pivot[new_event_col] = df_pivot[new_event_col].apply(lambda x: 1 if x > 0 else 0)
+    
+
+    temp = df_pivot[new_event_col].values
+    event_numbers = []
+    i = 0
+    j = 1
+    while (i < len(temp)):
+        if temp[i] >= 1:
+            start = i
+            while (i < len(temp) and temp[i] >= 1):
+                i+=1
+            event_numbers.extend([j] * (i - start))
+            j+=1
+        else:
+            event_numbers.append(0)
+            i+=1
+
+    # append the event number of the df
+    df_pivot[new_event_col] = event_numbers 
+    # return df_pivot
+
+    # remove the 0 values
+    df_pivot = df_pivot[df_pivot[new_event_col]>0][new_event_col]
+
+    df_with_all_counties_copy = df_with_all_counties.copy()
+
+    # Map the temporal event ids from df_pivot to the original dataframe using run_start_time
+    df_with_all_counties_copy[new_event_col] = df_with_all_counties_copy[constants.TIMESTAMP_COL].map(df_pivot)
+
+    return df_with_all_counties_copy
+
+
+def get_neighbors_at_level(graph: nx.Graph, county: str, level: int) -> set:
+    """
+    Get all neighbors of a county up to a specified level.
+    
+    Parameters:
+    -----------
+    graph : networkx.Graph
+        County adjacency graph
+    county : str
+        County name
+    level : int
+        Maximum neighbor level (1 = immediate neighbors, 2 = neighbors + their neighbors, etc.)
+        
+    Returns:
+    --------
+    set
+        Set of county names within the specified neighbor level
+    """
+    if county not in graph:
+        return {county}
+    
+    neighbors = {county}  # Include the county itself
+    current_level = {county}
+    
+    for _ in range(level):
+        next_level = set()
+        for node in current_level:
+            next_level.update(graph.neighbors(node))
+        current_level = next_level - neighbors # Only new neighbors for next iteration
+        neighbors.update(next_level)
+        if not current_level:  # No more neighbors to explore
+            break
+    
+    return neighbors
+
+
+def _create_event_map(events_df, 
+                      event_id, 
+                      event_col, 
+                      counties_geojson = None, 
+                      county_wide_events_col: str = 'event_number_ac_threshold_30', 
+                      plotting_axis=None, 
+                      state_fips_code=None):
+    """
+    Plot a specific event on a map showing which counties are involved and record counts.
+    
+    Parameters:
+    -----------
+    events_df : pd.DataFrame
+        Events dataframe (either time-only or spatio-temporal)
+    event_id : int
+        Event ID to plot
+    event_type : str
+        Type of event: 'time_only' or 'spatiotemporal'
+    customer_threshold : int
+        Customer threshold used for event detection
+    """
+    
+
+    if plotting_axis is None:
+        raise ValueError("plotting_axis must be provided, or use the plot_event_map function which creates its own figure and axis.")
+
+    if state_fips_code is None:
+        # check if state column exists in events_df
+        if constants.STATE_COL in events_df.columns:
+            unique_states = events_df[constants.STATE_COL].unique()
+            if len(unique_states) == 1:
+                state_name = unique_states[0].lower()
+                state_fips_code = constants.STATE_FIPS_DICT.get(state_name, None)
+                if state_fips_code is None:
+                    raise ValueError(f"State name '{state_name}' not found in state_fips_dict.")
+            else:
+                raise ValueError("Multiple states found in events_df. Please provide a specific state_fips_code.")
+        else:
+            raise ValueError(f"state_fips_code must be provided if '{constants.STATE_COL}' column is not in events_df.")
+    
+    
+    # Filter data for the specific event
+    event_data = events_df[events_df[event_col] == event_id]
+    
+    if len(event_data) == 0:
+        print(f"No data found for event {event_id}")
+        return
+    
+    def count_eaglei_outages(series):
+        """Custom aggregation function to calculate the number of EAGLE-i outages"""
+        return np.sum(np.diff(series.unique())>0) + 1
+
+    # Count records per county for this event
+    county_counts = event_data.groupby(constants.COUNTY_COL).agg({
+        constants.CUSTOMERS_COL: ['count', count_eaglei_outages, 'sum'],
+        constants.TIMESTAMP_COL: ['min', 'max'],
+        county_wide_events_col: 'nunique'
+    }).reset_index()
+
+    county_counts.columns = ['county', 'record_count', 'eaglei_outages_count', 'total_customers_out', 'start_time', 'end_time', 'num_county_wide_events']
+
+    if counties_geojson is None:
+        counties_geojson = load_counties_shapefile()
+    features = []
+    for feature in counties_geojson['features']:
+        if feature['properties']['STATE'] == state_fips_code:
+            features.append(feature)
+    
+    gdf = gpd.GeoDataFrame.from_features(features)
+    gdf = gdf.set_crs('EPSG:4326')
+
+    
+    # Merge with event data
+    gdf_with_counts = gdf.merge(
+        county_counts,
+        left_on='NAME',
+        right_on='county',
+        how='left'
+    )
+    
+    # Fill NaN values with 0 for counties not in this event
+    gdf_with_counts['record_count'] = gdf_with_counts['record_count'].fillna(0)
+    
+    # Plot all counties with boundaries
+    gdf_with_counts.boundary.plot(ax=plotting_axis, linewidth=0.8, color='black')
+    
+    # Create color map for event counties
+    event_counties = gdf_with_counts[gdf_with_counts['record_count'] > 0]
+    
+    if len(event_counties) > 0:
+        # Plot event counties with color intensity based on record count
+        t_ax=event_counties.plot(
+            column='total_customers_out',
+            ax=plotting_axis,
+            cmap='Reds',
+            legend=True,
+            legend_kwds={'label': 'Total Customers Interrupted (in all county-wide events)', 'shrink': 0.6},
+            vmin=event_counties['total_customers_out'].min(),
+            vmax=event_counties['total_customers_out'].max()
+        )
+
+        # Add county labels for event counties
+        for _, row in event_counties.iterrows():
+            centroid = row['geometry'].centroid
+            plotting_axis.annotate(
+                f"{row['NAME']}\n({int(row['num_county_wide_events'])})",
+                (centroid.x, centroid.y),
+                ha='center',
+                va='center',
+                fontsize=8,
+                bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.7)
+            )
+        t_fig = t_ax.figure
+        cb_ax = t_fig.axes[1] 
+        cb_ax.tick_params(labelsize=12)     # Increase colorbar tick label size
+        cb_ax.yaxis.label.set_size(12)      # Increase colorbar label size
+    else:
+        plotting_axis.text(0.5, 0.5, 'No counties involved in this event', 
+            verticalalignment='center', horizontalalignment='center',
+            transform=plotting_axis.transAxes,
+            color='red', fontsize=14, alpha=0.7, fontweight='bold')
+    
+    # Add a text in one corner stating that the map is for illustrative purposes only
+    plotting_axis.text(0, 0, 'Label boxes indicate number of county-wide events in that county', 
+            verticalalignment='bottom', horizontalalignment='left',
+            transform=plotting_axis.transAxes,
+            color='black', fontsize=8, alpha=0.7, fontstyle='italic')
+    
+    # Set title and styling
+    duration = (county_counts['end_time'].max() - county_counts['start_time'].min())
+    plotting_axis.set_title(
+        f'Event # {event_id}, {len(event_counties)} Counties, {county_counts["record_count"].sum():.0f} Total Records'
+        f', {county_counts["eaglei_outages_count"].sum():.0f} Total EAGLEi outages\n'
+        f'Start Time: {county_counts['start_time'].min()}, End Time: {county_counts['end_time'].max()}, Duration: {duration}',
+        fontsize=12,
+        pad=10
+    )
+
+    # Restrict the map to state extent
+    plotting_axis.set_xlim(gdf.total_bounds[0] - 0.05, gdf.total_bounds[2] + 0.05)
+    plotting_axis.set_ylim(gdf.total_bounds[1] - 0.05, gdf.total_bounds[3] + 0.05)
+    
+    # Remove axis labels and grid lines for cleaner look
+    plotting_axis.set_xlabel('')
+    plotting_axis.set_ylabel('')
+    plotting_axis.grid(False)
+
+    # Remove axis ticks for cleaner look
+    plotting_axis.set_xticks([])
+    plotting_axis.set_yticks([])
+
+    # Remove axis spines for cleaner look
+    for spine in plotting_axis.spines.values():
+        spine.set_visible(False)
+    
+    # # Print event summary
+    # print(f"\n{event_type.replace('_', ' ').title()} Event {event_id} Summary:")
+    # print(f"Counties involved: {', '.join(event_counties['NAME'].tolist())}")
+    # print(f"Total records: {county_counts['record_count'].sum():.0f}")
+    # print(f"Time range: {county_counts['start_time'].min()} to {county_counts['end_time'].max()}")
+    # print(f"Duration: {duration}")
+
+
+def plot_event_on_map(events_df, 
+                      event_id, 
+                      event_col, 
+                      counties_geojson = None, 
+                      county_wide_events_col='event_number_ac_threshold_30', 
+                      state_fips_code=None):
+    """
+    Wrapper function to plot a specific event on a map.
+    
+    Parameters:
+    -----------
+    events_df : pd.DataFrame
+        Events dataframe (either time-only or spatio-temporal)
+    event_id : int
+        Event ID to plot
+    event_col : str
+        Column name for event IDs in events_df
+    counties_geojson : dict
+        GeoJSON FeatureCollection containing Massachusetts county boundaries
+    county_wide_events_col : str
+        Column name for county-wide events in events_df
+        
+    Returns:
+    --------
+    fig : matplotlib.figure.Figure
+        The generated map figure
+    """
+    figsize = (12, 10)
+    fig, ax = plt.subplots(figsize=figsize)
+    _create_event_map(events_df, event_id, event_col, counties_geojson, county_wide_events_col, plotting_axis=ax, state_fips_code=state_fips_code)
+    plt.tight_layout()
+    plt.show(fig)
+
+
+def _create_event_timeline(events_df, 
+                           event_id, 
+                           event_col_to_identify, 
+                           event_col='event_number_ac_threshold_30', 
+                           max_counties=14, 
+                           plotting_axis=None):
+    """
+    Plot a timeline showing event start and end times by county within a specified time range.
+    
+    Parameters:
+    -----------
+    time_events_df : pandas.DataFrame
+        DataFrame containing event data with columns: county, run_start_time, event_number
+    start_time : str or datetime
+        Start time for the timeline (e.g., '2018-03-01' or '2018-03-01 12:00:00')
+    end_time : str or datetime  
+        End time for the timeline (e.g., '2018-03-10' or '2018-03-10 12:00:00')
+    event_col : str, default='event_number_ac_threshold_30'
+        Column name containing event numbers
+    figsize : tuple, default=(15, 10)
+        Figure size (width, height)
+    max_counties : int, optional
+        Maximum number of counties to display (displays counties with most events if limited)
+    
+    Returns:
+    --------
+    matplotlib.figure.Figure
+        The timeline plot figure
+    """
+    if plotting_axis is None:
+        raise ValueError("plotting_axis must be provided, or use the plot_event_timeline function which creates its own figure and axis.")
+
+    if max_counties > 14:
+        print(f"Warning: Limiting the number of counties to {max_counties} for better visualization.")
+        max_counties = 14
+
+    df_filtered = events_df[events_df[event_col_to_identify] == event_id].copy()
+    if len(df_filtered) == 0:
+        print(f"No events found with event ID {event_id}")
+        return None
+    
+    # Ensure run_start_time is datetime
+    # df_filtered[constants.TIMESTAMP_COL] = pd.to_datetime(df_filtered[constants.TIMESTAMP_COL])
+    
+    start_time = df_filtered[constants.TIMESTAMP_COL].min()
+    end_time = df_filtered[constants.TIMESTAMP_COL].max()
+    
+    # Calculate event start and end times for each county-event combination
+    event_ranges = []
+    
+    for county in df_filtered[constants.COUNTY_COL].unique():
+        county_data = df_filtered[df_filtered[constants.COUNTY_COL] == county]
+        
+        for event_num in county_data[event_col].unique():
+            if pd.isna(event_num):
+                continue
+                
+            event_data = county_data[county_data[event_col] == event_num]
+            event_start = event_data[constants.TIMESTAMP_COL].min()
+            event_end = event_data[constants.TIMESTAMP_COL].max()
+            
+            # If event has only one timestamp, add 15 minutes for visualization
+            if event_start == event_end:
+                event_end = event_start + pd.Timedelta(minutes=15)
+            
+            max_customers = event_data['customers_out'].max()
+            
+            event_ranges.append({
+                'county': county,
+                'event_num': int(event_num),
+                'start_time': event_start,
+                'end_time': event_end,
+                'duration_hours': (event_end - event_start).total_seconds() / 3600,
+                'max_customers_out': max_customers
+            })
+    
+    event_ranges_df = pd.DataFrame(event_ranges)
+    
+    if len(event_ranges_df) == 0:
+        print("No complete events found in the time range")
+        return None
+    total_counties_in_event = event_ranges_df['county'].nunique()
+    if total_counties_in_event > max_counties:
+        # print(f"Warning: There are {total_counties_in_event} counties involved in event {event_id}. ")
+        
+        # Selecting top counties to plot based on the maximum number of events in each county
+        # county_event_counts = event_ranges_df['county'].value_counts()
+        # top_counties = county_event_counts.head(max_counties).index.tolist()
+        # event_ranges_df = event_ranges_df[event_ranges_df['county'].isin(top_counties)]
+
+        # Selecting top counties to plot based on the maximum customers affected in each county
+        county_max_customers = event_ranges_df.groupby('county')['max_customers_out'].max().sort_values(ascending=False)
+        top_counties = county_max_customers.head(max_counties).index.tolist()
+        event_ranges_df = event_ranges_df[event_ranges_df['county'].isin(top_counties)]
+        
+        # print(f"Displaying top {len(top_counties)} counties with most events")
+    
+    # Sort counties by first event start time for better visualization
+    county_first_event = event_ranges_df.groupby('county')['start_time'].min().sort_values()
+    counties_ordered = county_first_event.index.tolist()
+    
+    # Calculate y-positions for events, ensuring no overlap within counties
+    y_positions = {}
+    event_y_positions = {}
+    county_row_height = 0.20  # Space allocated per county
+    event_height = 0.1  # Height of each event bar
+    
+    for i, county in enumerate(counties_ordered):
+        base_y = i * county_row_height
+        county_events = event_ranges_df[event_ranges_df['county'] == county].copy()
+        county_events = county_events.sort_values('start_time')
+        
+        # For each county, stack events vertically if they would overlap
+        # Since events within a county don't overlap in time, we can plot them all at the same level
+        # But we'll add a small vertical offset to make multiple events more visible
+        
+        for _, (_, event_row) in enumerate(county_events.iterrows()):
+            event_key = (county, event_row['event_num'])
+            # Use the base position for the county since events don't overlap in time
+            event_y_positions[event_key] = base_y
+        
+        y_positions[county] = base_y
+    
+    
+    # Color map for different event intensities
+    max_customers_global = event_ranges_df['max_customers_out'].max()
+    
+    # Plot each event as a horizontal bar
+    for _, row in event_ranges_df.iterrows():
+        county = row['county']
+        event_key = (county, row['event_num'])
+        y_pos = event_y_positions[event_key]
+        
+        
+        # Plot the event duration as a horizontal bar
+        plotting_axis.barh(y_pos, 
+                (row['end_time'] - row['start_time']).total_seconds() / (3600*24),  # Duration in days
+                left=mdates.date2num(row['start_time']),
+                height=event_height,
+                color = 'lightgray',
+                alpha=0.4,
+                edgecolor='black',
+                linewidth=0.5,
+                zorder=1)
+        
+        # Plot the individual timestamps as small vertical lines with color intensity equal to the customer's affected in each timestamp
+        county_event_data = df_filtered[(df_filtered[constants.COUNTY_COL] == county) & (df_filtered[event_col] == row['event_num'])]
+        for ts, cust in zip(county_event_data[constants.TIMESTAMP_COL], county_event_data[constants.CUSTOMERS_COL]):
+            plotting_axis.plot([mdates.date2num(ts), mdates.date2num(ts)], 
+                    [y_pos - event_height/2.0, y_pos + event_height/2.0], 
+                    color=plt.colormaps['Reds'](0.3 + 0.8 * (cust / max_customers_global)),  # Color based on customer intensity
+                    alpha=1.0, 
+                    linewidth=1.5,
+                    zorder=2)
+        
+        # Add event number as text
+        mid_time = row['start_time'] + (row['end_time'] - row['start_time']) / 2
+        plotting_axis.text(mdates.date2num(mid_time), y_pos+0.085, 
+                f"{int(row['event_num'])}", 
+                ha='center', va='center', 
+                fontsize=8, fontweight='normal', color='gray', zorder=3)
+    
+    # Customize the plot
+    plotting_axis.set_yticks([y_positions[county] for county in counties_ordered])
+    plotting_axis.set_yticklabels(counties_ordered)
+    plotting_axis.set_ylabel('Counties', fontsize=12, fontweight='bold')
+    plotting_axis.set_xlabel('Time', fontsize=12, fontweight='bold')
+    plotting_axis.set_title(f'Event # {event_id} Timeline by County\nStart Time: {start_time.strftime("%Y-%m-%d %H:%M")}, End Time: {end_time.strftime("%Y-%m-%d %H:%M")} '
+                 f'Duration: {(end_time - start_time).total_seconds() / 86400:.2f} days, {len(event_ranges_df)} County-wide Events, {total_counties_in_event} Counties', 
+                 fontsize=12, fontweight='bold', pad=20)
+    
+    # Format x-axis
+    plotting_axis.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d %H:%M'))
+    total_duration_hours = (end_time - start_time).total_seconds() / 3600
+    interval_value = max(1, total_duration_hours/30)        # maximum 30 values on the x-axis
+    plotting_axis.xaxis.set_major_locator(mdates.HourLocator(interval= int(interval_value)))
+    plt.setp(plotting_axis.xaxis.get_majorticklabels(), rotation=45, ha='right')
+
+    # Set x-axis limits
+    plotting_axis.set_xlim(mdates.date2num(start_time - pd.Timedelta(minutes=10)), 
+                mdates.date2num(end_time + pd.Timedelta(minutes=10)))
+
+    # Set y-axis limits
+    plotting_axis.set_ylim(-0.1, 2.7)
+
+    # Add colorbar to show customer intensity scale
+    sm = plt.cm.ScalarMappable(cmap=plt.colormaps['Reds'], 
+                               norm=plt.Normalize(vmin=0, vmax=max_customers_global))
+    sm.set_array([])
+    cbar = plt.colorbar(sm, ax=plotting_axis, shrink=0.8, pad=0.02)
+    cbar.set_label('Customers Interrupted', fontsize=12, fontweight='bold')
+
+    # Add a text in one corner
+    if total_counties_in_event > max_counties:
+        plotting_axis.text(1.09, 1.1, f'(Displaying top {max_counties} counties\nwith most customers affected)', 
+            verticalalignment='top', horizontalalignment='right',
+            transform=plotting_axis.transAxes,
+            color='black', fontsize=8, alpha=0.7, fontstyle='italic')
+
+
+def plot_event_timeline(events_df, event_id, event_col_to_identify, event_col='event_number_ac_threshold_30', figsize=(15, 6), max_counties=14):
+    # Create the plot
+    fig, ax = plt.subplots(figsize=figsize)
+    _create_event_timeline(events_df, event_id, event_col_to_identify, event_col, max_counties, ax)
+    plt.tight_layout()
+    plt.show(fig)
+
+
+def segregate_by_space(events_df, 
+                       temporal_event_number, 
+                       temporal_event_col='event_number_temporal', 
+                       county_event_col='event_number_ac_threshold_30', 
+                       neighbour_level=1, 
+                       graph_of_counties=None,
+                       timestamp_column=constants.TIMESTAMP_COL,
+                       customer_column=constants.CUSTOMERS_COL,
+                       verbose=0,
+                       time_overlap_method='outage_process_overlap') -> pd.DataFrame:
+
+    spatiotemporal_event_col_name = 'event_number_spatiotemporal'
+
+    # Filter events for the specified temporal event number
+    event_data = events_df[events_df[temporal_event_col] == temporal_event_number].copy()
+
+    # Get the time ranges for each county-event combination
+    county_events_in_event = event_data.groupby([constants.COUNTY_COL,county_event_col]).agg({timestamp_column:['min','max']}).sort_values((timestamp_column,'min'))
+    county_events_in_event = county_events_in_event.reset_index(drop=False, col_level=1)
+    county_events_in_event = county_events_in_event.droplevel(0, axis=1)
+
+    # Pre-compute neighbor sets for all counties in the event
+    if graph_of_counties is None:
+        raise ValueError("Adjanency Graph of Counties must be provided")
+    else:
+        county_neighbors = {}
+        for county in events_df.county.unique():
+            county_neighbors[county] = get_neighbors_at_level(graph_of_counties, county, level=neighbour_level)
+
+    def _find_outage_process_end_time(county_event_id):
+        '''
+        Find the time when the outage process ends for a given county event.
+        '''
+        event_data_subset = event_data[event_data[county_event_col] == county_event_id]
+        # check if all values in 'customers_out' are the same
+        if event_data_subset[customer_column].nunique() == 1:
+            return event_data_subset[timestamp_column].min()
+        diffs = event_data_subset[customer_column].diff()
+        diffs.iloc[0] = 1
+        idx = diffs[diffs>0].index.values[-1]
+        return event_data_subset.loc[idx,timestamp_column]
+    
+    county_events_in_event['outage_process_end_at'] = county_events_in_event[county_event_col].apply(_find_outage_process_end_time)
+
+    # define a function to check the spatiotemporal conditions
+    def _check_spatiotemporal_conditions(event_i, event_j):
+
+        # Check if counties are neighbours
+        if event_j[constants.COUNTY_COL] not in county_neighbors[event_i[constants.COUNTY_COL]]:
+            return False
+
+        # Check for temporal overlap
+        if time_overlap_method == 'outage_process_overlap':
+            if (event_i['min'] <= event_j['max']) and (event_j['min'] <= event_i['outage_process_end_at']):
+                return True
+        elif time_overlap_method == 'standard_overlap':
+            if (event_i['min'] <= event_j['max']) and (event_i['max'] >= event_j['min']):
+                return True
+            
+        return False
+
+    # Create a graph and add all the events as nodes using their ids as per county_event_col
+    event_graph = nx.Graph()
+    event_graph.add_nodes_from(county_events_in_event[county_event_col].values)
+    
+    # Add edges between nodes if their counties are neighbours and their time ranges overlap
+    for i, row_i in county_events_in_event.iterrows():
+        for j, row_j in county_events_in_event.iterrows():
+            if i >= j:
+                continue
+
+            if _check_spatiotemporal_conditions(row_i, row_j):
+                event_graph.add_edge(row_i[county_event_col], row_j[county_event_col])
+    
+    # Find connected components in the graph
+    connected_components = list(nx.connected_components(event_graph))
+    if verbose > 0:
+        print(f"Found {len(connected_components)} spatial groups within temporal event {temporal_event_number}")
+    
+    # Assign spatiotemporal event numbers based on connected components
+    spatiotemporal_event_mapping = {}
+    for spatiotemporal_event_number, component in enumerate(connected_components, start=1):
+        for county_event_id in component:
+            spatiotemporal_event_mapping[county_event_id] = spatiotemporal_event_number
+            event_data.loc[event_data[county_event_col] == county_event_id, spatiotemporal_event_col_name] = spatiotemporal_event_number
+    
+    # change the column to integer type
+    event_data[spatiotemporal_event_col_name] = event_data[spatiotemporal_event_col_name].astype(int)
+
+    return event_data
+
+
+def _create_eaglei_multicounty_performance_curve(events_df: pd.DataFrame, 
+                                                 event_number: int, 
+                                                 event_method: str ='spatiotemporal', 
+                                                 timestamp_column: str =constants.TIMESTAMP_COL, 
+                                                 customer_column: str =constants.CUSTOMERS_COL) -> go.Figure:
+    """
+    Plot performance curve of an event that involves multiple counties.
+    That include temporally overlapping events and spatio-temporal events.
+
+    Parameters:
+    -----------
+    events_df : pd.DataFrame
+        DataFrame containing event data with columns: county, run_start_time, customers_out, event_number
+    event_number : int
+        Event number to plot
+    event_method : str, default='spatiotemporal'
+        Method used for event detection (for labeling purposes)
+    timestamp_column : str, default='run_start_time'
+        Column name for the timestamp
+    customer_column : str, default='customers_out'
+        Column name for the customer count
+
+    Returns:
+    -------
+    None
+    """
+
+    # Determine the correct event column based on the method
+    event_col = 'event_number_' + event_method
+
+    # Check if the event column exists in the DataFrame
+    if event_col not in events_df.columns:
+        raise ValueError(f"Event column '{event_col}' not found in DataFrame")
+    
+    # Check if the timestamp and customer columns exist
+    if timestamp_column not in events_df.columns or customer_column not in events_df.columns:
+        raise ValueError(f"Timestamp column '{timestamp_column}' or customer column '{customer_column}' not found in DataFrame")
+
+    # Filter data for the specified event number
+    event_data = events_df[events_df[event_col] == event_number].copy()
+    if event_data.empty:
+        raise ValueError(f"No data found for event number {event_number}")
+    
+    # Check how many unique counties are involved in this event
+    unique_counties = event_data[constants.COUNTY_COL].nunique()
+    if unique_counties < 2:
+        raise ValueError(f"Event number {event_number} involves only {unique_counties} county. Use plot_eaglei_event_curves() instead.")
+    
+    # Convert timestamp column to datetime if not already (check first)
+    if not np.issubdtype(event_data[timestamp_column].dtype, np.datetime64):
+        event_data[timestamp_column] = pd.to_datetime(event_data[timestamp_column])
+
+    # Sort data by timestamp
+    event_data = event_data.sort_values(by=timestamp_column)
+
+    # Counties order
+    counties_order = event_data.groupby(constants.COUNTY_COL)[customer_column].sum().sort_values(ascending=False).index.tolist()
+
+    # Calculate data for performance curve
+    performance_data = event_data.groupby(timestamp_column).agg({customer_column: 'sum'}).reset_index()
+    # add a row at the end with timestamp + 15 minutes and 0 customers_out to extend the performance curve
+    last_row = pd.DataFrame([{timestamp_column: performance_data[timestamp_column].max() + pd.Timedelta(minutes=15), customer_column: 0}])
+    performance_data = pd.concat([performance_data, last_row], ignore_index=True)
+    # add a row at the begining with timestamp and 0 customers_out to extend the performance curve
+    first_row = pd.DataFrame([{timestamp_column: performance_data[timestamp_column].min() - pd.Timedelta(minutes=0), customer_column: 0}])
+    performance_data = pd.concat([first_row, performance_data], ignore_index=True)
+
+    # Calculate time range for x-axis limits
+    event_start_time = performance_data[timestamp_column].min()
+    event_end_time = performance_data[timestamp_column].max()
+    time_offset_for_xaxis = ((event_end_time-event_start_time).total_seconds()/60)*.05
+
+    # Create an empty figure
+    fig = go.Figure()
+
+    # Add performance curve as a line (step plot equivalent)
+    fig.add_trace(go.Scatter(x=performance_data[timestamp_column], y=performance_data[customer_column],
+                    mode='lines',
+                    line_shape='hv',  # horizontal-vertical step lines
+                    name='Performance Curve',
+                    marker_color=constants.COLOR_PERFORMANCE_CURVE,
+                    line=dict(width=1)
+                    ))
+
+    # Use a particular color palette
+    color_palette = px.colors.qualitative.Prism  # 24 colors, similar to tab20
+
+    # if there are more than 10 counties then only use first 10 counties and group the rest as 'Other'
+    if len(counties_order) > 10:
+        counties_to_plot = counties_order[:10]
+        event_data[constants.COUNTY_COL] = event_data[constants.COUNTY_COL].apply(lambda x: x if x in counties_to_plot else 'Other counties')
+        counties_order = counties_to_plot + ['Other counties']
+
+    # Add a bar trace for each county
+    for i, c in enumerate(counties_order):
+        county_data = event_data[event_data[constants.COUNTY_COL] == c]
+        fig.add_trace(go.Bar(
+            x=county_data[timestamp_column],
+            y=county_data[customer_column],
+            name=c,
+            offset=-0.5,     # left align the bars to start from the timestamp (like align='edge' in matplotlib)
+            marker_color=color_palette[i % len(color_palette)],  # Cycle through color palette
+            opacity=1.0,
+        ))
+    
+    # Update layout for stacked bars with no gaps and no borders
+    fig.update_layout(barmode='stack', bargap=0, xaxis={'categoryorder':'array', 'categoryarray':counties_order})
+    fig.update_traces(marker_line_width=0)
+    
+    # Set figure size
+    fig.update_layout(width=1200, height=600)
+    
+    # Set titles and labels
+    fig.update_layout(
+        title=dict(
+            text=f"Performance Curve for Event {event_number} ({event_method})",
+            x=0.5,
+            pad=dict(t=0, b=0),
+            xanchor='center',
+            font=dict(size=18, family='Arial', color='black', weight='bold')
+        ),
+        xaxis_title=dict(
+            text="Time",
+            font=dict(size=16, family='Arial', color='black', weight='bold')
+        ),
+        yaxis_title=dict(
+            text="Total Customers Affected",
+            font=dict(size=16, family='Arial', color='black', weight='bold')
+        ),
+        # increase size of the tick labels
+        xaxis_tickfont=dict(size=14),
+        yaxis_tickfont=dict(size=14),
+        legend=dict(
+            orientation="v",
+            yanchor="top",
+            y=1,
+            xanchor="left",
+            x=1.02,
+            bgcolor="rgba(255, 255, 255, 0.8)",
+            bordercolor="gray",
+            borderwidth=1,
+            font=dict(size=14)
+        ),
+    )
+
+    # Update x and y axis properties
+    fig.update_layout(
+        hovermode='x unified',
+        xaxis=dict(
+            type='date',
+            # tickformat='%d %b %y\n%H:%M',
+            range=[event_start_time - pd.Timedelta(minutes=time_offset_for_xaxis),
+                   event_end_time + pd.Timedelta(minutes=time_offset_for_xaxis)],
+            # tickangle=-45
+        ),
+        yaxis=dict(
+            type='linear',
+            tickformat=',',
+            gridcolor='lightgray',
+            # range=[0, performance_data[customer_column].max() * 1.1]
+        ),
+        template='plotly_white',
+        margin=dict(t=50, b=50, r=150)  # Extra margin for legend
+    )
+
+    # Return the figure
+    return fig
+
+
+def plot_eaglei_multicounty_performance_curve(events_df, event_number, event_method='spatiotemporal', timestamp_column='run_start_time', customer_column='customers_out'):
+    # Create the figure
+    fig = _create_eaglei_multicounty_performance_curve(events_df, event_number, event_method=event_method, timestamp_column=timestamp_column, customer_column=customer_column)
+    # Display the figure
+    fig.show()
+
+
+def save_spatiotemporal_event_curves(events_df, 
+                          temporal_event_id, 
+                          temporal_event_col='event_number_temporal',
+                          spatiotemporal_event_col='event_number_spatiotemporal', 
+                          pdf_path=None):
+    """
+    Save performance curves of spatiotemporal events within a specified temporal event to a single-page PDF.
+    
+    Parameters:
+    -----------
+    events_df : pd.DataFrame
+        DataFrame containing event data with spatiotemporal event numbers
+    temporal_event_id : int
+        Temporal event ID to plot
+    temporal_event_col : str
+        Column name for temporal event numbers
+    spatiotemporal_event_col : str
+        Column name for spatiotemporal event numbers
+    pdf_path : str, optional
+        Path to save the PDF file. If None, saves to 'RESULTS_DIR/curves_of_event_{temporal_event_id}.pdf'
+    """
+    # Filter data for the specified temporal event
+    event_data = events_df[events_df[temporal_event_col] == temporal_event_id]
+    
+    # Get unique spatiotemporal event IDs within this temporal event
+    spatiotemporal_event_ids = event_data[spatiotemporal_event_col].unique()
+    
+    num_spatiotemporal_events = len(spatiotemporal_event_ids)
+
+    if num_spatiotemporal_events == 1:
+        print("Only one spatiotemporal event found; no need to plot multiple subplots.")
+        return
+    
+    if pdf_path == None:
+        cwd = os.getcwd()
+        pdf_path = os.path.join(cwd , constants.RESULTS_DIR, f'curves_of_event_{temporal_event_id}.pdf')
+
+    with PdfPages(pdf_path) as pdf:
+
+        # Create a plot with 2 rows and 1 column
+        fig, axes = plt.subplots(2, 1, sharex=True, sharey=False, figsize=(20, 15))
+        axes = axes.flatten()
+
+        event_data_agg = event_data.groupby(constants.TIMESTAMP_COL).agg({constants.CUSTOMERS_COL:'sum', temporal_event_col:'min'}).reset_index().sort_values(constants.TIMESTAMP_COL, ascending=True)
+        outages_full, restores_full, performance_process_full = get_eaglei_processes(event_data_agg, temporal_event_id, event_method='temporal')
+        outage_process_full = [(outages_full[i][0], v) for i, v in enumerate(np.cumsum([o[1] for o in outages_full]))]
+        restore_process_full = [(restores_full[i][0], v) for i, v in enumerate(np.cumsum([r[1] for r in restores_full]))]
+        # Add 0 for the first time step to the outage and restore processes
+        outage_process_full.insert(0, (outage_process_full[0][0], 0))  
+        restore_process_full.insert(0, (outage_process_full[0][0], 0))
+        # Add the last time step to the outage process
+        outage_process_full.append((restore_process_full[-1][0], restore_process_full[-1][1]))  
+        # Remove the first time step of the performance process
+        performance_process_full = performance_process_full[1:]  # Remove the first time step (0, 0)
+        performance_process_full.insert(0, (performance_process_full[0][0], 0))
+        # create a step plot of the outages
+        axes[0].step([row[0] for row in outage_process_full], [row[1] for row in outage_process_full], where='post', label='Outage Curve', color=constants.COLOR_OUTAGE_CURVE)
+        axes[0].step([row[0] for row in restore_process_full], [row[1] for row in restore_process_full], where='post', label='Restore Curve', color=constants.COLOR_RESTORE_CURVE)
+        axes[0].step([row[0] for row in performance_process_full], [-row[1] for row in performance_process_full], where='post', label='Performance Curve', color=constants.COLOR_PERFORMANCE_CURVE)
+        axes[0].set_ylabel('Number of Customers')
+        # axes[0].set_xlabel('Time')
+        axes[0].set_title(f'Complete Temporal Event # {temporal_event_id}', fontsize=12)
+        axes[0].axhline(y=0, color='black', linewidth=0.5)  # show a horizontal line at 0
+        # Format x-axis for better readability
+        xtick_formatter = mdates.DateFormatter('%m-%d-%y\n%H:%M')
+        axes[0].xaxis.set_major_formatter(xtick_formatter)
+        # Get the first and last x-values
+        first_x_tick = min([row[0] for row in performance_process_full])
+        last_x_tick = max([row[0] for row in performance_process_full])
+        # Calculate three intermediate tick positions (e.g., the midpoint)
+        time_diff_secs = (last_x_tick - first_x_tick).total_seconds()
+        intermediate_x_ticks = [first_x_tick + pd.Timedelta(seconds=time_diff_secs * i / 15) for i in range(1, 15)]
+        # Set the x-ticks to only these three positions
+        axes[0].set_xticks([first_x_tick, *intermediate_x_ticks, last_x_tick])
+
+        # Create single plot for the complete spatiotemporal event
+        event_data_agg = event_data.groupby(constants.TIMESTAMP_COL).agg({constants.CUSTOMERS_COL:'sum', temporal_event_col:'min'}).reset_index().sort_values(constants.TIMESTAMP_COL, ascending=True)
+        outages_full, restores_full, performance_process_full = get_eaglei_processes(event_data_agg, temporal_event_id, event_method='temporal')
+        outage_process_full = [(outages_full[i][0], v) for i, v in enumerate(np.cumsum([o[1] for o in outages_full]))]
+        restore_process_full = [(restores_full[i][0], v) for i, v in enumerate(np.cumsum([r[1] for r in restores_full]))]
+        # Add 0 for the first time step to the outage and restore processes
+        outage_process_full.insert(0, (outage_process_full[0][0], 0))  
+        restore_process_full.insert(0, (outage_process_full[0][0], 0))
+        # Add the last time step to the outage process
+        outage_process_full.append((restore_process_full[-1][0], restore_process_full[-1][1]))  
+        # Remove the first time step of the performance process
+        performance_process_full = performance_process_full[1:]  # Remove the first time step (0, 0)
+        performance_process_full.insert(0, (performance_process_full[0][0], 0))
+
+        for spatiotemporal_event_id in spatiotemporal_event_ids:
+            spatiotemporal_event_data = event_data[event_data[spatiotemporal_event_col] == spatiotemporal_event_id]
+            spatiotemporal_event_data = spatiotemporal_event_data.groupby(constants.TIMESTAMP_COL).agg({constants.CUSTOMERS_COL:'sum', spatiotemporal_event_col:'min'}).reset_index().sort_values(constants.TIMESTAMP_COL, ascending=True)
+            outages, restores, performance_process = get_eaglei_processes(spatiotemporal_event_data, spatiotemporal_event_id, event_method='spatiotemporal')
+
+            outage_process = [(outages[i][0], v) for i, v in enumerate(np.cumsum([o[1] for o in outages]))]
+            restore_process = [(restores[i][0], v) for i, v in enumerate(np.cumsum([r[1] for r in restores]))]
+            
+            # Add 0 for the first time step to the outage and restore processes
+            outage_process.insert(0, (outage_process[0][0], 0))  
+            restore_process.insert(0, (outage_process[0][0], 0))
+            
+            # Add the last time step to the outage process
+            outage_process.append((restore_process[-1][0], restore_process[-1][1]))  
+            
+            # Remove the first time step of the performance process
+            performance_process = performance_process[1:]  # Remove the first time step (0, 0)
+            performance_process.insert(0, (performance_process[0][0], 0))  
+
+            # create a step plot of the performance process
+            axes[1].step([row[0] for row in performance_process], [row[1] for row in performance_process], where='post', label=f'Performance Curve {spatiotemporal_event_id}')
+
+        axes[1].set_ylabel('Number of Customers (Log Scale)')
+        axes[1].set_xlabel('Time')
+        axes[1].set_title(f'Performance Curves of all Spatiotemporal Events of the Temporal Event # {temporal_event_id}', fontsize=12)
+
+        axes[1].set_yscale('log')
+
+        # Format x-axis for better readability
+        xtick_formatter = mdates.DateFormatter('%m-%d-%y\n%H:%M')
+        axes[1].xaxis.set_major_formatter(xtick_formatter)
+        
+        plt.tight_layout()
+        # plt.show()
+        pdf.savefig(fig)
+        plt.close(fig)
+
+    print(f"Saved plots to {pdf_path}")
+
+
+def _ordinal(n: int) -> str:
+    """
+    Return the ordinal representation of an integer (e.g. 1 -> "1st", 2 -> "2nd", 11 -> "11th").
+
+    Args:
+        n: integer to convert
+
+    Returns:
+        str: ordinal string
+
+    Raises:
+        TypeError: if n is not an int
+
+    Examples:
+        >>> ordinal(1)
+        '1st'
+        >>> ordinal(2)
+        '2nd'
+        >>> ordinal(9)
+        '9th'
+        >>> ordinal(11)
+        '11th'
+        >>> ordinal(43)
+        '43rd'
+        >>> ordinal(-1)
+        '-1st'
+    """
+    if not isinstance(n, int):
+        raise TypeError("ordinal() expects an int")
+
+    abs_n = abs(n)
+    # Special-case 11-13 -> 'th'
+    if 10 <= (abs_n % 100) <= 20:
+        suffix = "th"
+    else:
+        last = abs_n % 10
+        if last == 1:
+            suffix = "st"
+        elif last == 2:
+            suffix = "nd"
+        elif last == 3:
+            suffix = "rd"
+        else:
+            suffix = "th"
+
+    return f"{n}{suffix}"
+
+
+def save_plots_to_pdf(events_df, 
+                      event_id, 
+                      graph_of_counties,
+                      overlap_method='outage_process_overlap', 
+                      county_event_col='event_number_ac_threshold_30',
+                      pdf_path=None):
+    """
+    Save plots of specified events to a PDF file.
+    
+    Parameters:
+    -----------
+    events_df : pd.DataFrame
+        Events dataframe (either time-only or spatio-temporal)
+    event_id : int
+        event ID to plot
+    method : str
+        Type of event: 'time_only' or 'spatiotemporal'
+    customer_threshold : int
+        Customer threshold used for event detection
+    pdf_path : str
+        Path to save the PDF file
+    """
+
+    if pdf_path == None:
+        cwd = os.getcwd()
+        pdf_path = os.path.join(cwd , constants.RESULTS_DIR, f'plots_of_event_{event_id}.pdf')
+
+    spatiotemporal_events = segregate_by_space(events_df, 
+                                               temporal_event_number=event_id, 
+                                               time_overlap_method=overlap_method,
+                                               county_event_col=county_event_col,
+                                               graph_of_counties=graph_of_counties)
+    new_events_ids = spatiotemporal_events.event_number_spatiotemporal.value_counts().index.values  # sorted by event size
+    print(f"{len(new_events_ids)} spatiotemporal events created")
+
+    with PdfPages(pdf_path) as pdf:
+        # create a figure with two subplots so that the top subplot contains the map and the bottom subplot contains the time series
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 12), gridspec_kw={'height_ratios': [1.4, 1]})
+
+        _create_event_map(events_df, 
+                          event_id, 
+                          event_col='event_number_temporal', 
+                          plotting_axis=ax1,
+                          county_wide_events_col=county_event_col)
+        # Add a text in the top left corner indicating which event this is
+        ax1.text(0, 1, 'Original Event (based only on temporal overlaps)', 
+                verticalalignment='top', horizontalalignment='left',
+                transform=ax1.transAxes,
+                color='red', fontsize=10, alpha=1.0, fontstyle='normal', fontweight='bold')
+        
+        _create_event_timeline(events_df, 
+                               event_id, 
+                               event_col_to_identify='event_number_temporal', 
+                               event_col=county_event_col,
+                               plotting_axis=ax2)
+        plt.tight_layout()
+        # plt.show(fig)       # display the figure of the original event
+        pdf.savefig(fig)
+        plt.close(fig)
+
+        # save all the created spatiotemporal events
+        for i, id in enumerate(new_events_ids):
+            # create a figure with two subplots so that the top subplot contains the map and the bottom subplot contains the time series
+            fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 12), gridspec_kw={'height_ratios': [1.4, 1]})
+            _create_event_map(events_df=spatiotemporal_events, 
+                              event_id=id, 
+                              county_wide_events_col=county_event_col,
+                              event_col='event_number_spatiotemporal', 
+                              plotting_axis=ax1)
+            # Add a text in the top left corner indicating which event this is
+            ax1.text(0, 1, f'Spatiotemporal Event: {_ordinal(i+1)} largest, out of {len(new_events_ids)} total', 
+                    verticalalignment='top', horizontalalignment='left',
+                    transform=ax1.transAxes,
+                    color='red', fontsize=10, alpha=1.0, fontstyle='normal', fontweight='bold')
+            _create_event_timeline(spatiotemporal_events, id, 'event_number_spatiotemporal', plotting_axis=ax2)
+            plt.tight_layout()
+            # plt.show(fig)       # display the figure of the original event
+            pdf.savefig(fig)
+            plt.close(fig)
+
+        # save the performance curve of the temporal event
+        fig1 = _create_eaglei_multicounty_performance_curve(events_df, event_id, event_method='temporal')
+        # fig1.show()
+        temp_file_name = os.path.join(cwd , constants.RESULTS_DIR, "temp.png")
+        fig1.write_image(file=temp_file_name, format="png", width=1200, height=600, scale=1.0)     # convert the plotly figure to a static image
+        # fig1.write_html(file=temp_file_name.replace('.pdf', '.html'))   # save as html as well
+        
+        # read the image back using matplotlib to get its dimensions
+        img = plt.imread(temp_file_name, format='png')
+        # Get image dimensions
+        img_dimensions = img.shape
+        img_height = img_dimensions[0]
+        img_width = img_dimensions[1]
+        # Set desired DPI
+        display_dpi = 100.0
+        # Calculate figure size in inches
+        fig_size = (img_width / display_dpi, img_height / display_dpi)
+        # create a matplotlib figure to display the image
+        fig = plt.figure(figsize=fig_size)
+        plt.imshow(img, interpolation='nearest')    # inerpolation='nearest' to avoid blurriness
+        plt.axis('off') # Turn off axes for a cleaner look
+        pdf.savefig(fig, dpi=300)
+        plt.close(fig) # Close the Matplotlib figure
+        # Clean up the temporary image file
+        os.remove(temp_file_name)
+    
+    print(f"Saved plots to {pdf_path}")
+
+    save_spatiotemporal_event_curves(spatiotemporal_events, temporal_event_id=event_id)
+
+
+# ------------------------- Public API for EagleiStateProcessor -------------------------
+
+# A class which can load data for a specific state
+class EagleiStateProcessor:
+    def __init__(self, 
+                 state_name: str, 
+                 verbose: int = 1):
+        
+        self.verbose = verbose
+
+        # Load EAGLE-i data for the state
+        self.eaglei_df, self.county_wide_customers = load_eaglei_state_data(state_name, verbose=verbose)
+
+        # Load the adjacency graph for counties in the state
+        self.state_fips_code = constants.STATE_FIPS_DICT.get(state_name.lower(), None)
+        self.county_adjacency_graph = create_county_adjacency_graph(state_fips_prefix=self.state_fips_code)
+
+        # Initializing other attributes
+        self.state_name = state_name
+        self.counties = self.eaglei_df['county'].unique().tolist()
+        self.county_processors = {}
+        self.all_counties_events_df = pd.DataFrame()
+        self.ac_customers_threshold = 1
+
+    def add_edge_to_county_adjacency_graph(self, from_county: str, to_county: str, edge_weight: float = 0.0, border_length: float = 0.0):
+        '''
+        Add an additional edge to the county adjacency graph.
+        Each edge is a tuple of two county names (county1, county2).
+        Parameters:
+        -----------
+        from_county : str
+            Name of the first county
+        to_county : str
+            Name of the second county
+        edge_weight : float
+            Weight of the edge (default: 0.0)
+        border_length : float
+            Length of the shared border in kilometers (default: 0.0)
+        Returns:
+        --------
+        None
+        '''
+        if from_county not in self.county_adjacency_graph:
+            print(f"Error: from_county {from_county} not found in the county adjacency graph.")
+        elif to_county not in self.county_adjacency_graph:
+            print(f"Error: to_county {to_county} not found in the county adjacency graph.")
+        else:
+            self.county_adjacency_graph.add_edge(from_county, to_county, weight=edge_weight, overlap_length_km=border_length)
+            if self.verbose > 0:
+                print(f"Added an additional edge from {from_county} to {to_county} with weight {edge_weight} and border length {border_length} to the county adjacency graph.")
+    
+    def auto_process_all_counties(self,
+                                  min_customers_before_gap: int = 10,
+                                  min_customers_after_gap: int = 2,
+                                  max_gap_minutes: int = 24*60, # 1 day
+                                  ac_customers_threshold: int = 30
+                                  ):
+        '''
+        Automatically process all counties in the state to identify gaps, fill gaps, and extract events.
+        Parameters:
+        -----------
+        min_customers_before_gap : int
+            Minimum number of customers before a gap to consider it valid (default: 10)
+        min_customers_after_gap : int
+            Minimum number of customers after a gap to consider it valid (default: 2)
+        max_gap_minutes : int
+            Maximum gap duration in minutes to consider for filling (default: 1440 minutes = 1 day)
+        ac_customers_threshold : int
+            Customer threshold for event extraction (default: 30)
+        Returns:
+        --------
+        None
+        '''
+
+        for county in self.counties:
+            if self.verbose > 0:
+                print(f"\nProcessing County: {county}")
+            county_processor = EagleiCountyProcessor(
+                eaglei_df=self.eaglei_df,
+                county_name=county,
+                verbose=self.verbose
+            )
+            county_processor.identify_gaps(
+                min_customers_before_gap=min_customers_before_gap,
+                min_customers_after_gap=min_customers_after_gap,
+                max_gap_minutes=max_gap_minutes
+            )
+            county_processor.fill_gaps(
+                auto_decide_rank_threshold=True
+            )
+            county_processor.extract_events_ac_thr(
+                customer_threshold=ac_customers_threshold,
+                crossing_mode='both'
+            )
+            self.county_processors[county] = county_processor
+        
+        # Create one dataframe with all counties data
+        self.all_counties_events_df = pd.concat([processor.county_df_with_events_ac_thr for processor in self.county_processors.values()], ignore_index=True)
+        # Only keep records where customers_out >= customer_threshold
+        self.all_counties_events_df = self.all_counties_events_df[self.all_counties_events_df[constants.CUSTOMERS_COL] >= ac_customers_threshold].copy()
+        # Sort by timestamp
+        self.all_counties_events_df = self.all_counties_events_df.sort_values(constants.TIMESTAMP_COL).reset_index(drop=True)
+        print(f"\nTotal records with outages >= {ac_customers_threshold}: {len(self.all_counties_events_df)}")
+        print(f"Date range: {self.all_counties_events_df[constants.TIMESTAMP_COL].min()} to {self.all_counties_events_df[constants.TIMESTAMP_COL].max()}")
+
+        event_number_column = f'event_number_ac_threshold_{ac_customers_threshold}'
+        # Remove duplicate event numbers across counties and reassign new event numbers
+        temp_df = self.all_counties_events_df[['county', event_number_column]].copy()
+        temp_df = temp_df.drop_duplicates(subset=['county', event_number_column], keep='first')
+        temp_df = temp_df.sort_values(by=['county', event_number_column])
+        temp_df['new_ids'] = np.arange(1, len(temp_df)+1)
+        self.all_counties_events_df = pd.merge(self.all_counties_events_df, temp_df, on=['county', event_number_column], how='left')
+        self.all_counties_events_df = self.all_counties_events_df.drop(event_number_column, axis=1)
+        self.all_counties_events_df = self.all_counties_events_df.rename(columns={'new_ids': event_number_column})
+
+        # Identify temporal overlapping events across all counties
+        self.all_counties_events_df = find_time_overlapping_groups(self.all_counties_events_df, 
+                                                                   event_col=event_number_column)
+        
+        self.ac_customers_threshold = ac_customers_threshold
+
+    def save_spatiotemporal_event_plots(self, temporal_event_id: int, pdf_path: str|None = None):
+        '''
+        Save spatiotemporal event plots for all events in the state to a PDF file.
+        Parameters:
+        -----------
+        pdf_path : str
+            Path to save the PDF file (default: None, which saves to 'RESULTS_DIR/spatiotemporal_events_{state_name}.pdf')
+        Returns:
+        --------
+        None
+        '''
+        if self.all_counties_events_df.empty:
+            raise ValueError("No events data found. Please run auto_process_all_counties() first.")
+        
+        # check if the event id exists in the all_counties_events_df
+        event_number_column = f'event_number_ac_threshold_{self.ac_customers_threshold}'
+        if temporal_event_id not in self.all_counties_events_df[event_number_column].unique():
+            raise ValueError(f"Temporal event ID {temporal_event_id} not found in the events data.")
+        
+        save_plots_to_pdf(self.all_counties_events_df, 
+                          event_id=temporal_event_id, 
+                          overlap_method='standard_overlap', 
+                          graph_of_counties=self.county_adjacency_graph,
+                          county_event_col=event_number_column,
+                          pdf_path=pdf_path)
+
+
+
+# ------------------------- Public API for EagleiCountyProcessor -------------------------
 
 # A class which can load data for a specific county from the eaglei_df and perform the gap filling and event extraction
 class EagleiCountyProcessor:
     def __init__(self, 
                  eaglei_df: pd.DataFrame, 
                  county_name: str, 
-                 customer_column: str ='customers_out', 
-                 timestamp_column: str ='run_start_time', 
-                 verbose: int =1):
+                 customer_column: str = constants.CUSTOMERS_COL, 
+                 timestamp_column: str = constants.TIMESTAMP_COL,
+                 verbose: int = 1):
         
         self.verbose = verbose
 

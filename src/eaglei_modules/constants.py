@@ -5,10 +5,13 @@
 # Path to the EAGLEi data directory
 import os
 EAGLEI_DATA_DIR = os.path.join('Eagle-idatasets')
+PROCESSED_DATA_DIR = os.path.join('processed_data')
+RESULTS_DIR = os.path.join('Results')
+MISC_DIR = os.path.join('misc')
 
 # column names for the EAGLEi outage data
 CUSTOMERS_COL = 'customers_out'
-TIMESTAMP_COL = 'timestamp'
+TIMESTAMP_COL = 'run_start_time'
 COUNTY_COL = 'county'
 STATE_COL = 'state'
 YEAR_COL = 'year'
