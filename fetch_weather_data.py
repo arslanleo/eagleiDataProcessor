@@ -128,15 +128,17 @@ def main(state, start, end):
     service += endts.strftime("year2=%Y&month2=%m&day2=%d&")
 
     stations = get_stations_from_networks(state)
+    print(f"Found {len(stations)} stations for {state}.")
     data=''
-    for station in stations:
+    for i, station in enumerate(stations):
         uri = f"{service}&station={station}"
-        print(f"Downloading: {station} weather data")
+        print(f"Downloading weather data from station {station} ({i+1}/{len(stations)})")
         data = data + download_data(uri)
     print(f"Weather data has been downloaded for {state}. Saving to csv.")
+    
     data=StringIO(data)
     # change to csv format
-    data=pd.read_csv(data,sep=',',comment='#')
+    data=pd.read_csv(data, sep=',', comment='#', low_memory=False)
     # filter out repeated columns
     data = data[data['tmpf'] != 'tmpf']
     outfile=f'weather_data/{state}/weather_{state}_{start}_{end}.csv'
