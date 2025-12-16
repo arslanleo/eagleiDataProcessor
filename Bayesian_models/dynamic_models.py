@@ -11,13 +11,13 @@ end=2024
 target_variable='tmpf'
 
 # time series outage data
-raw_outage_df=pd.read_excel(f'../outage_data/{state}/{county}/Merged_ZOH_Cleaned_data_{start}_{end}_{county}_{state}.xlsx')
+raw_outage_df=pd.read_excel(f'../outage_data/{state}/{county}/Merged_Cleaned_data_{start}_{end}_{county}_{state}.parquet')
 
 # aggregated event data
-event_df=pd.read_csv(f'../Results/Outage_Events_Summary_All_{county}_0.001_{start}-{end}.csv')
+event_df=pd.read_csv(f'../Results/Outage_Events_Summary_All_{county}_0.001_{start}-{end}.parquet')
 
 # weather data
-weather_df=pd.read_csv(f'../weather_data/{state}/cleaned_weather_data_{county}.csv')
+weather_df=pd.read_csv(f'../weather_data/{state}/cleaned_weather_data_{county}.parquet')
 
 # 98th percentile of wind
 percentile_98=weather_df[target_variable].quantile(.98)

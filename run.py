@@ -14,10 +14,10 @@ import map_outage_weather
 import os
 
 # inputs
-state="Rhode Island"
-county='Bristol'
+state="Washington"
+county='King'
 start=2018
-end=2019    #2024
+end=2024    #2024
 threshold=0.001
 
 

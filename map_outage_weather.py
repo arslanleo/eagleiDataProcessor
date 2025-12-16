@@ -71,7 +71,7 @@ def main(state, county, start, end, pct_threshold):
         # Extract weather data for the zero outage period
         max_ws = df_weather_data['sknt'].loc[zero_index_weather:zero_index_weather].max()
         max_g = df_weather_data['gust'].loc[zero_index_weather:zero_index_weather].max()
-        pp_max = df_weather_data['p01i'].loc[zero_index_weather:zero_index_weather].max()
+        pp_sum = df_weather_data['p01i'].loc[zero_index_weather:zero_index_weather].sum()
         year=df_weather_data['DATE'].loc[zero_index_weather].year
         month=df_weather_data['DATE'].loc[zero_index_weather].month
         day=df_weather_data['DATE'].loc[zero_index_weather].day
@@ -98,7 +98,7 @@ def main(state, county, start, end, pct_threshold):
             'recovery_slope': 0,
             'cust_normalized': 0,
             'gust': max_g,
-            'precipitation': pp_max,
+            'precipitation': pp_sum,
             #'ppocc': pocc,
            # 'wind_direction':max_dirct,
            # 'dew_point_temp': max_dwpf,
@@ -187,7 +187,7 @@ def main(state, county, start, end, pct_threshold):
                 #max_T = df_weather_data['T'].loc[first_zero_index_weather:second_zero_index_weather].max()
                 #min_T = df_weather_data['T'].loc[first_zero_index_weather:second_zero_index_weather].min()
                 max_g = df_weather_data['gust'].loc[first_zero_index_weather:second_zero_index_weather].max()
-                pp_max = df_weather_data['p01i'].loc[first_zero_index_weather:second_zero_index_weather].max()
+                pp_sum = df_weather_data['p01i'].loc[first_zero_index_weather:second_zero_index_weather].sum()
                 #pocc = df_weather_data['poccurence'].loc[first_zero_index_weather:second_zero_index_weather].max()
                 #max_dirct = df_weather_data['drct'].loc[first_zero_index_weather:second_zero_index_weather].max()
                 #max_dwpf = df_weather_data['dwpf'].loc[first_zero_index_weather:second_zero_index_weather].max()
@@ -213,7 +213,7 @@ def main(state, county, start, end, pct_threshold):
                     #'Maximum_Temperature(degree)': max_T,
                     #'Minimum_Temperature(degree)': min_T,
                     'gust':max_g,
-                    'precipitation':pp_max,
+                    'precipitation':pp_sum,
                     'year': year,
                     'month': month,
                     'day': day,
