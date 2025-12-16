@@ -6,7 +6,7 @@ import os
 def main(state, county, start, end):
     # Set file path and year range
     data_folder = 'Eagle-idatasets/'  # Directory containing raw CSV files
-    output_folder = './outage_data/'
+    output_folder = f'./outage_data/{state}/{county}'
     os.makedirs(output_folder, exist_ok=True)
     print("Begun processing the outage data.")
     # state_name = "Illinois"#Select State
@@ -57,8 +57,8 @@ def main(state, county, start, end):
             merged_df = pd.merge(full_df, df, on='run_start_time', how='left').ffill() # fill missing timestamps
 
             # Save cleaned dataset
-            cleaned_path = os.path.join(output_folder, f"Cleaned_data_{year}_{county}.xlsx")
-            merged_df.to_excel(cleaned_path, index=False)
+            #cleaned_path = os.path.join(output_folder, f"Cleaned_data_{year}_{county}.parquet")
+            #merged_df.to_parquet(cleaned_path, index=False)
 
             # ZOH Expansion for sample and hold
             df6 = merged_df.copy()
@@ -84,8 +84,8 @@ def main(state, county, start, end):
             #df_expanded['year'] = year  # Optional: Add year info
 
             # Save individual expanded dataset
-            zoh_path = os.path.join(output_folder, f"{state}/{county}ZOH_Cleaned_data_{year}_{county}_{state}.xlsx")
-            df_expanded.to_excel(zoh_path, index=False)
+            #zoh_path = os.path.join(output_folder, f"Cleaned_data_{year}_{county}_{state}.parquet")
+            #df_expanded.to_parquet(zoh_path, index=False)
 
             # Append to merged dataset
             all_years_data.append(df_expanded)
@@ -99,8 +99,8 @@ def main(state, county, start, end):
     if all_years_data:
         merged_all = pd.concat(all_years_data, ignore_index=True)
         merged_all.sort_values(by='run_start_time', inplace=True)
-        merged_output_path = os.path.join(output_folder, f"{state}//{county}//Merged_ZOH_Cleaned_data_{start}_{end}_{county}_{state}.xlsx")
-        merged_all.to_excel(merged_output_path, index=False)
+        merged_output_path = os.path.join(output_folder, f"Merged_Cleaned_data_{start}_{end}_{county}_{state}.parquet")
+        merged_all.to_parquet(merged_output_path, index=False)
         print("All years merged and saved successfully.")
     else:
         print("No data processed to merge.")

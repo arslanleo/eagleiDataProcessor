@@ -134,15 +134,15 @@ def main(state, start, end):
         uri = f"{service}&station={station}"
         print(f"Downloading weather data from station {station} ({i+1}/{len(stations)})")
         data = data + download_data(uri)
-    print(f"Weather data has been downloaded for {state}. Saving to csv.")
+    print(f"Weather data has been downloaded for {state}. Saving to parquet.")
     
     data=StringIO(data)
     # change to csv format
     data=pd.read_csv(data, sep=',', comment='#', low_memory=False)
     # filter out repeated columns
     data = data[data['tmpf'] != 'tmpf']
-    outfile=f'weather_data/{state}/weather_{state}_{start}_{end}.csv'
-    data.to_csv(outfile)
+    outfile=f'weather_data/{state}/weather_{state}_{start}_{end}.parquet'
+    data.to_parquet(outfile)
     # outfn = f"{station}_{startts:%Y%m%d%H%M}_{endts:%Y%m%d%H%M}.txt"
     # with open(outfn, "w", encoding="ascii") as fh:
     #     fh.write(data)

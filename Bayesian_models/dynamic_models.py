@@ -4,11 +4,11 @@ import matplotlib.pyplot as plt
 from datetime import datetime,timedelta
 
 state='Washington'
-county='King'
+county='Whatcom'
 start=2018
 end=2024
 
-target_variable='gust'
+target_variable='tmpf'
 
 # time series outage data
 raw_outage_df=pd.read_excel(f'../outage_data/{state}/{county}/Merged_ZOH_Cleaned_data_{start}_{end}_{county}_{state}.xlsx')
@@ -30,7 +30,7 @@ weather_df['valid']=pd.to_datetime(weather_df['valid'])
 weather_df=weather_df.set_index('valid')
 
 # investigate 98th percentile of wind events
-event_df_filtered=event_df[event_df[target_variable]>percentile_98].reset_index()
+event_df_filtered=event_df[event_df['Air_temp']>percentile_98].reset_index()
 
 for i in range(len(event_df_filtered)):
     print(event_df_filtered.loc[i,'year'])
@@ -44,21 +44,21 @@ for i in range(len(event_df_filtered)):
     # plotting
     fig, ax1 = plt.subplots()
 
-    ax1.plot(selected_weather_df.index,selected_weather_df['gust'],'r',label='Wind Gust (MPH)')
+    ax1.plot(selected_weather_df.index,selected_weather_df[target_variable],'r',label='Wind Gust (MPH)')
     ax1.set_xlabel('Date')
-    ax1.set_ylabel('Wind Gust (MPH)',color='r')
+    ax1.set_ylabel('Air Temperature (degrees F)',color='r')
     ax1.tick_params(axis='y', labelcolor='r')
 
-    ax3=ax1.twinx()
-    ax3.plot(selected_weather_df.index,selected_weather_df['p01i'],'g',label='Precipitation (inches)')
-    ax3.set_ylabel('Precipitation (in)',color='g')
-    ax3.tick_params(axis='y', labelcolor='g')
+    # ax3=ax1.twinx()
+    # ax3.plot(selected_weather_df.index,selected_weather_df['p01i'],'g',label='Precipitation (inches)')
+    # ax3.set_ylabel('Precipitation (in)',color='g')
+    # ax3.tick_params(axis='y', labelcolor='g')
 
     ax2=ax1.twinx()
     ax2.step(selected_event_df.index,selected_event_df['sum'],'b', label='Num Customers Out')
     ax2.set_ylabel('Num Customers Out', color='b')
     fig.tight_layout()
-    plt.title(f'Comparison of PNW Precipitation and Wind Gust to Event {i}, {county} County')
-    plt.savefig(f'event_plots/event_{i}_{county}.png')
+    plt.title(f'Comparison of PNW Heat Wave to Event {i}, {county} County')
+    plt.savefig(f'event_plots/{county}_event_{i}_{target_variable}.png')
     plt.close()
 breakpoint()

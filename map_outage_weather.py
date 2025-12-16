@@ -19,8 +19,8 @@ def main(state, county, start, end, pct_threshold):
     threshold=round(pct_threshold*int(customers))
 
     # Load DataSets; Outage and Weather DataSets
-    df_outage_data = pd.read_excel(f'outage_data//{state}//{county}//Merged_ZOH_Cleaned_data_{start}_{end}_{county}_{state}.xlsx')
-    df_weather_data = pd.read_csv(f'weather_data/{state}/cleaned_weather_data_{county}.csv')
+    df_outage_data = pd.read_parquet(f'outage_data//{state}//{county}//Merged_Cleaned_data_{start}_{end}_{county}_{state}.parquet')
+    df_weather_data = pd.read_parquet(f'weather_data/{state}/cleaned_weather_data_{county}.parquet')
 
 
     # Change the datetime
@@ -232,14 +232,14 @@ def main(state, county, start, end, pct_threshold):
                 event_data_list.append(event_data)
 
     # Convert event data list to DataFrame and save
-    print("Saving outage and non-outage events to csv.")
+    print("Saving outage and non-outage events to parquet.")
     event_df = pd.DataFrame(event_data_list)
-    event_df.to_csv(f'Results/Outage_Events_Summary_All_{county}_{pct_threshold}_{start}-{end}.csv', index=False)
+    event_df.to_parquet(f'Results/Outage_Events_Summary_All_{county}_{pct_threshold}_{start}-{end}.parquet', index=False)
     #print(event_df.head())
     #print(no_outage_df.head())
     analysis_df = pd.concat([event_df, no_outage_df], ignore_index= True)
     #print(analysis_df.head())
-    analysis_df.to_csv(f'Results/Data_All_{county}_{pct_threshold}_{start}-{end}.csv',index = False)
+    analysis_df.to_parquet(f'Results/Data_All_{county}_{pct_threshold}_{start}-{end}.parquet',index = False)
 
 
 # Example

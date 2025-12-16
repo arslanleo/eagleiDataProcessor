@@ -48,7 +48,7 @@ def preprocess_weather_data(df, column, replace_dict=None, create_occurrence=Fal
 
 def find_county(file, state, county):
     # Event Datasets
-    weather_dataset=pd.read_csv(file, low_memory=False)
+    weather_dataset=pd.read_parquet(file)
     columns_to_keep = ['station', 'valid', 'tmpf', 'sknt', 'p01i', 'gust', 'lon', 'lat']
     weather_dataset = weather_dataset[columns_to_keep]
 
@@ -107,7 +107,7 @@ def main(state, county, start, end):
 
     # state='Florida'
     # county='Miami-Dade'
-    file=f'weather_data/{state}/weather_{state}_{start}_{end}.csv'
+    file=f'weather_data/{state}/weather_{state}_{start}_{end}.parquet'
 
     print('Sorting weather data at the county-level.')
 
@@ -141,10 +141,10 @@ def main(state, county, start, end):
 
     # Fill missing gust values with wind speed
     weather_dataset['gust'] = weather_dataset['gust'].fillna(weather_dataset['sknt'])
-    print("Weather data has been successfully cleaned. Saving to csv.")
+    print("Weather data has been successfully cleaned. Saving to parquet.")
     # Preview
     #print(weather_dataset.head())
-    weather_dataset.to_csv(f'weather_data/{state}/cleaned_weather_data_{county}.csv')
+    weather_dataset.to_parquet(f'weather_data/{state}/cleaned_weather_data_{county}.parquet')
 
 
 # use case example
