@@ -97,37 +97,10 @@ def compare_counties(df1,df2,target_variable):
     plt.legend()
     plt.show()
 
+
 # read in data
 #outage_event_df=pd.read_csv(f'../Results/Outage_Events_Summary_All_{county}_{threshold}_{start}-{end}.csv')
 all_data=pd.read_csv(f'../Results/Data_All_{county}_{threshold}_{start}-{end}.csv')
 
-all_data['outage_binary']=(all_data['cummulative_customer_out'] != 0).astype(int)
-all_data['gust']=myround(all_data['gust'])
-all_data = all_data.groupby('gust').agg({
-    'outage_binary':'mean'
-}).reset_index()
-plt.plot(all_data['gust'],all_data['outage_binary'])
-plt.show()
-breakpoint()
-# all_data1=pd.read_csv(f'../Results/Data_All_Maricopa_{threshold}_{start}-{end}.csv')
-# target_variable='precipitation'
-# # identify 97.5th percentile of 5 or more days for heat wave
-# percentile_975=all_data1[target_variable].quantile(.975)
-# filtered_data=outage_event_df[outage_event_df[target_variable]>percentile_975]
-# filtered_data=filtered_data.sort_values(by=['year', 'month', 'day'], ascending=[True, True, True])
-#
-# outage_event_df_1=pd.read_csv(f'../Results/Outage_Events_Summary_All_Maricopa_{threshold}_{start}-{end}.csv')
-# filtered_data1=outage_event_df_1[outage_event_df_1[target_variable]>percentile_975]
-# filtered_data1=filtered_data1.sort_values(by=['year', 'month', 'day'], ascending=[True, True, True])
-# compare_counties(filtered_data,filtered_data1,target_variable)
-#outage_duration_by_month(outage_event_df)
-#outage_mag_by_month(outage_event_df)
-#plot_seasonal_outages(outage_event_df)
-#plot_seasonal_weather_behavior(outage_event_df)
-# compare_counties(outage_event_df)
-#plot_wind(outage_event_df)
-#plot_wind(outage_event_df)
-#plot_precip(outage_weather_df)
-#plot_max_temp(outage_weather_df)
 
 breakpoint()

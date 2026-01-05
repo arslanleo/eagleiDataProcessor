@@ -13,9 +13,8 @@ import fetch_weather_data
 import map_outage_weather
 import os
 
-# inputs
-state="Washington"
-county='King'
+state="Texas"
+county='Harris'
 start=2018
 end=2024    #2024
 threshold=0.001
@@ -31,13 +30,13 @@ os.makedirs(output_folder, exist_ok=True)
 
 # fetch weather data
 
-# add if statement that only fetches weather data if its not already loaded in
+# add if statement that only fetches weather data if it's not already loaded in
 a=f"weather_data/{state}/weather_{state}_{start}_{end}.parquet"
 if os.path.isfile(a):
     print("State weather data already downloaded. Moving onto weather cleaning.")
 else:
     print("State weather data not found. Proceeding to fetch weather from IEM servers.")
-    fetch_weather_data.main(state, start, end)
+    fetch_weather_data.main(state, county, start, end)
 
 # clean + map weather data
 a=f"weather_data/{state}/cleaned_weather_data_{county}.parquet"
