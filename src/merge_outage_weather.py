@@ -160,6 +160,24 @@ def merge_outages_with_weather_netcdf(state: str,
     # Remove an existing attribute if present
     if 'min_data_threshold' in ds_weather.attrs:
         del ds_weather.attrs['min_data_threshold']
+
+    # Find total customers in the county and add as attribute
+    customers_data_file_path = os.path.join(
+        config.get("data_paths.outage_data_dir"),
+        state,
+        f"county_total_customers_in_{state.lower()}.parquet"
+    )
+    # check if the file exists
+    if os.path.exists(customers_data_file_path):
+        customers_df = pd.read_parquet(customers_data_file_path)
+        total_customers = customers_df[customers_df['county'] == county]['total_customers'].values
+        if len(total_customers) > 0:
+            ds_weather.attrs['total_county_customers'] = int(total_customers[0])
+        else:
+            ds_weather.attrs['total_county_customers'] = 'unknown'
+    else:
+        ds_weather.attrs['total_county_customers'] = 'unknown'
+        print(f"Note: Total customers data file not found: {customers_data_file_path}")
     
     # Save merged dataset
     print(f"Saving merged NetCDF to {merged_file_path}")
