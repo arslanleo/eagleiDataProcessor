@@ -136,14 +136,16 @@ def load_eaglei_state_data(state_name: str,
     # ==================== Reading and Filtering Data ====================
     cwd = os.getcwd()
     output_file_name = f"eaglei_cleaned_{state_name.lower()}.parquet"
+    output_file_dir = os.path.join(cwd, constants.OUTAGE_DATA_DIR, state_name)
+    output_file_path = os.path.join(output_file_dir, output_file_name)
     output_county_total_customers_file_name = f"county_total_customers_in_{state_name.lower()}.parquet"
     
     # check if the file already exists
-    if os.path.isfile(os.path.join(cwd, constants.PROCESSED_DATA_DIR, output_file_name)):
+    if os.path.isfile(output_file_path):
         print(f"Cleaned data for {state_name} already exists as {output_file_name}. Loading the existing file...")
         try:
-            data_df = pd.read_parquet(os.path.join(cwd, constants.PROCESSED_DATA_DIR, output_file_name))
-            county_total_customers = pd.read_parquet(os.path.join(cwd, constants.PROCESSED_DATA_DIR, output_county_total_customers_file_name))
+            data_df = pd.read_parquet(output_file_path)
+            county_total_customers = pd.read_parquet(os.path.join(output_file_dir, output_county_total_customers_file_name))
             return data_df, county_total_customers
         except Exception as e:
             print(f"Error loading existing cleaned data: {e}")
@@ -305,8 +307,8 @@ def load_eaglei_state_data(state_name: str,
     # ==================== Export Cleaned Data ====================
 
     try:
-        data_df.to_parquet(os.path.join(cwd, constants.PROCESSED_DATA_DIR, output_file_name), index=False)
-        county_total_customers.to_parquet(os.path.join(cwd, constants.PROCESSED_DATA_DIR, output_county_total_customers_file_name), index=False)
+        data_df.to_parquet(output_file_path, index=False)
+        county_total_customers.to_parquet(os.path.join(output_file_dir, output_county_total_customers_file_name), index=False)
         print(f"\nCleaned data saved to {output_file_name}")
         print(f"and county total customers data saved to {output_county_total_customers_file_name}")
     except Exception as e:

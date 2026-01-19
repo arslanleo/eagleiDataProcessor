@@ -1,0 +1,65 @@
+{
+  "project_name": "EAGLE-I Data Processor",
+  "project_version": "1.0.0",
+  "project_description": "Comprehensive outage and weather data processing pipeline for Eagle-I dataset analysis",
+  
+  "processing_parameters": {
+    "state": "Florida",
+    "county": "Miami-Dade",
+    "start_year": 2014,
+    "end_year": 2024
+  },
+
+  "data_cleaning_parameters": {
+    "min_customers_before_gap": 20,
+    "min_customers_after_gap": 2,
+    "max_gap_minutes": 1440,
+    "use_auto_gap_rank_threshold": true,
+    "gap_rank_threshold_quantile": 0.4,
+
+    "events_customer_threshold":30
+  },
+
+  "processing_options": {
+    "fetch_weather_data": true,
+    "clean_weather_data": true,
+    "clean_outage_data": true,
+    "align_data": true,
+    "skip_if_exists": true
+  },
+
+  "weather_variables": {
+    "temperature": "tmpf",
+    "wind_speed": "sknt",
+    "wind_gust": "gust",
+    "precipitation": "p01i"
+  },
+
+  "data_paths": {
+    "eaglei_data_dir": "eagle-idatasets",
+    "outage_data_dir": "outage_data",
+    "weather_data_dir": "weather_data",
+    "merged_data_dir": "merged_data",
+    "results_dir": "results",
+    "misc_dir": "misc"
+  },
+
+  "file_patterns": {
+    "weather_file_pattern": "weather_{state}_{county}_{start}_{end}.parquet",
+    "cleaned_weather_file_pattern": "cleaned_weather_{state}_{county}_{start}_{end}.nc",
+    "outage_file_pattern": "eaglei_outages_{year}.csv",
+    "cleaned_outage_file_pattern": "cleaned_outage_{state}_{county}_{start}_{end}.parquet",
+    "merged_file_pattern": "merged_data_{state}_{county}_{start}_{end}.nc",
+    "merged_result_file_pattern": "Outage_Events_Summary_All_{county}_{threshold}_{start}-{end}.csv"
+  },
+
+  "visualization_settings": {
+    "figure_dpi": 300,
+    "figure_size": [12, 6]
+  },
+
+  "logging": {
+    "log_level": "INFO",
+    "enable_console_logging": true
+  }
+}

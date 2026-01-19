@@ -4,9 +4,10 @@
 
 # Path to the EAGLEi data directory
 import os
-EAGLEI_DATA_DIR = os.path.join('Eagle-idatasets')
+EAGLEI_DATA_DIR = os.path.join('eagle-idatasets')
 PROCESSED_DATA_DIR = os.path.join('processed_data')
-RESULTS_DIR = os.path.join('Results')
+OUTAGE_DATA_DIR = os.path.join('outage_data')    # to store cleaned eagle-i outage data
+RESULTS_DIR = os.path.join('results')
 MISC_DIR = os.path.join('misc')
 
 # column names for the EAGLEi outage data

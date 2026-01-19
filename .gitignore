@@ -1,18 +1,62 @@
+# Data directories (large files)
 /weather_data/
 /outage_data/
-/processed_data/
-/Results/
-/Eagle-idatasets/eaglei_outages_2014.csv
-/Eagle-idatasets/eaglei_outages_2015.csv
-/Eagle-idatasets/eaglei_outages_2016.csv
-/Eagle-idatasets/eaglei_outages_2017.csv
-/Eagle-idatasets/eaglei_outages_2018.csv
-/Eagle-idatasets/eaglei_outages_2019.csv
-/Eagle-idatasets/eaglei_outages_2020.csv
-/Eagle-idatasets/eaglei_outages_2021.csv
-/Eagle-idatasets/eaglei_outages_2022.csv
-/Eagle-idatasets/eaglei_outages_2023.csv
-/Eagle-idatasets/eaglei_outages_2024.csv
-/Bayesian_models/event_plots/
-/EIA_disturbances_data/
-/analyze_results.Rmd
+/merged_data/
+/results/
+/eagle-idatasets/eaglei_outages_*.csv
+
+
+# Environment and virtualenv files
+venv/
+env/
+ENV/
+.venv
+
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+
+# Logs
+logs/
+*.log
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Configuration (if sensitive)
+.env
+.env.local
+config.local.json
+
+# OS specific
+Thumbs.db

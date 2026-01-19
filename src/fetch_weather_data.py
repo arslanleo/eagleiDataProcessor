@@ -138,7 +138,7 @@ def find_stations_in_county(state, county, jdict):
 def get_stations_from_networks(state, county):
     """Build a station list by using a bunch of IEM networks."""
     # stations = []
-    state_to_code=pd.read_csv('Eagle-idatasets/county_fips_master.csv', encoding='latin')
+    state_to_code=pd.read_csv('eagle-idatasets/county_fips_master.csv', encoding='latin')
     result = state_to_code[state_to_code['state_name'] == state]
     state_abbr = result['state_abbr'].values[0]
     network=f"{state_abbr}_ASOS"
@@ -181,12 +181,12 @@ def get_stations_from_networks(state, county):
 #         now += interval
 
 
-def main(state, county, start, end):
+def main(state, county, start, end, outfile):
     """Our main method"""
     print("Began process of fetching weather data from IEM servers.")
     # timestamps in UTC to request data for
     startts = datetime(start, 1, 1)
-    endts = datetime(end, 12, 31)
+    endts = datetime(end+1, 1, 1)   # the last day is exclusive so adding 1 to end year
 
     service = SERVICE + "data=all&tz=Etc/UTC&format=comma&latlon=yes&"
 
@@ -199,19 +199,19 @@ def main(state, county, start, end):
     for i, station in enumerate(stations):
         uri = f"{service}&station={station}"
         print(f"Downloading weather data from station {station} ({i+1}/{len(stations)})")
-        data = data + download_data(uri)
-    print(f"Weather data has been downloaded for {state}. Saving to parquet.")
+        new_data = download_data(uri)
+        # for debugging purposes, to make sure that there is enough data downloaded for each station
+        print(f"Downloaded {len(new_data)} bytes of data from station {station}")
+        data += new_data
+    print(f"Weather data has been downloaded for {state}. Saving to parquet: {outfile}")
     
     data=StringIO(data)
     # change to csv format
     data=pd.read_csv(data, sep=',', comment='#', low_memory=False)
     # filter out repeated columns
     data = data[data['tmpf'] != 'tmpf']
-    outfile=f'weather_data/{state}/weather_{state}_{county}_{start}_{end}.parquet'
+
     data.to_parquet(outfile)
-    # outfn = f"{station}_{startts:%Y%m%d%H%M}_{endts:%Y%m%d%H%M}.txt"
-    # with open(outfn, "w", encoding="ascii") as fh:
-    #     fh.write(data)
 
 # main('Rhode Island',2018,2019)
 # #
