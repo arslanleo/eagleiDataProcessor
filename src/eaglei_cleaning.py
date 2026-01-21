@@ -12,7 +12,9 @@ License: MIT
 from src.configManager import ConfigManager
 from src.eaglei_modules.eagleiEventProcessing import EagleiStateProcessor
 from src.eaglei_modules.constants import TIMESTAMP_COL, YEAR_COL
-
+import pandas as pd
+import numpy as np
+import os
 
 def main(state: str, 
          county: str, 
@@ -58,9 +60,20 @@ def main(state: str,
         # fill the gaps with a specific rank threshold if auto decision is not enabled
         county_data.fill_gaps(auto_decide_rank_threshold=False,
                               rank_threshold_quantile = config.get("data_cleaning_parameters.gap_rank_threshold_quantile", 0.4))
-
+    # Find total customers in the county and add as attribute
+    customers_data_file_path = os.path.join(
+        config.get("data_paths.outage_data_dir"),
+        state,
+        f"county_total_customers_in_{state.lower()}.parquet"
+    )
+    # check if the file exists
+    if os.path.exists(customers_data_file_path):
+        customers_df = pd.read_parquet(customers_data_file_path)
+        total_customers = customers_df[customers_df['county'] == county]['total_customers'].values
     # Extract county-level events using a minimum customer threshold as specified in the config file
-    county_data.extract_events_ac_thr(customer_threshold = config.get("data_cleaning_parameters.events_customer_threshold", 30))
+    county_data.extract_events_ac_thr(event_detection_type=config.get("data_cleaning_parameters.event_detection_approach","flat"),
+                                      total_customers=total_customers,
+                                      customer_threshold = config.get("data_cleaning_parameters.events_customer_threshold", 30))
 
     # save only the data for the specified years
     # first create a year column

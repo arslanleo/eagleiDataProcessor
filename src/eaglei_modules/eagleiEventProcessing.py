@@ -1033,6 +1033,8 @@ def extract_events_eaglei_ac(outage_df: pd.DataFrame,
 
 
 def extract_events_eaglei_ac_threshold(outage_df: pd.DataFrame,
+                                        event_detection_type: str = "flat",
+                                        total_customers: int = 0,
                                         customer_threshold: int = 10,
                                         time_delta: str = "15min",
                                         timestamp_column: str = constants.TIMESTAMP_COL,
@@ -1046,6 +1048,7 @@ def extract_events_eaglei_ac_threshold(outage_df: pd.DataFrame,
 
     Parameters:
     - outage_df (pd.DataFrame): DataFrame containing time series data with customer outages.
+    - event_detection_type (str): Method for selecting number of customers on outage threshold.
     - customer_threshold (int): Threshold for customer outages to consider an event active.
     - time_delta (str): Time interval for checking continuity (e.g., "15min").
     - timestamp_column (str): Name of the column containing timestamps.
@@ -1080,7 +1083,29 @@ def extract_events_eaglei_ac_threshold(outage_df: pd.DataFrame,
         print(f'Data is not sorted by {timestamp_column}. Sorting the data first')
         df = df.sort_values(timestamp_column).reset_index(drop=True)
 
-    event_col = f'event_number_ac_threshold_{customer_threshold}'
+    event_col = f'event_number_ac_threshold_{event_detection_type}_{customer_threshold}'
+
+    # Determine detection method - which changes thresholding approach
+    if event_detection_type=='percentile':
+        customer_threshold=df['customers_out'].quantile(customer_threshold)
+        print(f'Using percentile based event detection: Events defined '
+              f'as those greater than {customer_threshold} customers.')
+    elif event_detection_type=='percent_customers':
+        if total_customers != 0:
+            customer_threshold=round(customer_threshold*int(total_customers))
+            print(f'Defining events as a percent of customers in the county out: Events defined '
+                  f'as those greater than {customer_threshold} customers.')
+        else:
+            print("Error using percent customers detection method: Defining events using the flat method.")
+            customer_threshold=30
+            print(f'Events defined as those greater than {customer_threshold} customers.')
+    elif event_detection_type=='flat':
+        print(f'Defining events as a flat value: Events defined '
+              f'as those greater than {customer_threshold} customers.')
+    else:
+        print('Invalid event detection method. Using a flat 30 customers as event definition.')
+        customer_threshold=30
+
     n = len(df)
     if n == 0:
         return df.assign(**{event_col: pd.Series(dtype="Int64" if active_only else "int")})
@@ -3494,6 +3519,8 @@ class EagleiStateProcessor:
                                   min_customers_before_gap: int = 10,
                                   min_customers_after_gap: int = 2,
                                   max_gap_minutes: int = 24*60, # 1 day
+                                  detection_method: str = "flat",
+                                  total_customers: int=0,
                                   ac_customers_threshold: int = 30
                                   ):
         '''
@@ -3507,6 +3534,8 @@ class EagleiStateProcessor:
             Minimum number of customers after a gap to consider it valid (default: 2)
         max_gap_minutes : int
             Maximum gap duration in minutes to consider for filling (default: 1440 minutes = 1 day)
+        event_detection_type : str
+            Method for determining customer threshold (default: flat)
         ac_customers_threshold : int
             Customer threshold for event extraction (default: 30)
         
@@ -3532,6 +3561,8 @@ class EagleiStateProcessor:
                 auto_decide_rank_threshold=True
             )
             county_processor.extract_events_ac_thr(
+                event_detection_type=detection_method,
+                total_customers=total_customers,
                 customer_threshold=ac_customers_threshold,
                 crossing_mode='both'
             )
@@ -3977,7 +4008,9 @@ class EagleiCountyProcessor:
         else:
             self.event_stats_ac = _stats
 
-    def extract_events_ac_thr(self, 
+    def extract_events_ac_thr(self,
+                              event_detection_type: str = "flat",
+                              total_customers: int=0,
                               customer_threshold: int = 10, 
                               crossing_mode: str = 'both'):
         
@@ -3987,16 +4020,18 @@ class EagleiCountyProcessor:
         self.county_df_with_events_ac_thr = extract_events_eaglei_ac_threshold(self.county_df_filled, 
                                                                                timestamp_column=self.timestamp_column, 
                                                                                customer_column=self.customer_column,
+                                                                               event_detection_type=event_detection_type,
+                                                                               total_customers=total_customers,
                                                                                customer_threshold=customer_threshold, 
                                                                                crossing_mode=crossing_mode)
-        event_col_name = f'event_number_ac_threshold_{customer_threshold}'
+        event_col_name = f'event_number_ac_threshold_{event_detection_type}_{customer_threshold}'
         
         if self.verbose > 0:
-            print(f"Total Events Created (AC with Threshold = {customer_threshold}): {self.county_df_with_events_ac_thr[event_col_name].nunique()}")
+            print(f"Total Events Created (AC with Threshold = {event_detection_type} at {customer_threshold}): {self.county_df_with_events_ac_thr[event_col_name].nunique()}")
         
         self.event_stats_ac_thr = get_eaglei_event_stats(self.county_df_with_events_ac_thr,
                                                          event_numbers = self.county_df_with_events_ac_thr[event_col_name].unique(),
-                                                         event_method = f'ac_threshold_{customer_threshold}',
+                                                         event_method = f'ac_threshold_{event_detection_type}_{customer_threshold}',
                                                          timestamp_column = self.timestamp_column,
                                                          customer_column = self.customer_column)
     
@@ -4070,3 +4105,4 @@ class EagleiCountyProcessor:
         plt.suptitle(f'Histogram of Log of Customers Out in {self.county_name} County (Eagle-i individual outages)', fontsize=16)
         plt.tight_layout()
         plt.show()
+

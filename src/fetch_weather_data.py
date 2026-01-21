@@ -66,7 +66,7 @@ def get_stations_from_filelist(filename):
 
 def find_stations_in_county(state, county, jdict):
     # Load counties GeoJSON (replace 'ma_counties.geojson' with your file path)
-    counties = gpd.read_file('gz_2010_us_050_00_5m.json', encoding='latin1')
+    counties = gpd.read_file('misc/gz_2010_us_050_00_5m.json', encoding='latin1')
     # ensure we are only looking in correct states (avoid duplicate county names and speed up process)
     county_to_fips=pd.read_csv('Eagle-idatasets/county_fips_master.csv', encoding='latin')
     ans=county_to_fips[county_to_fips['county_name']==f'{county} County']
@@ -138,7 +138,7 @@ def find_stations_in_county(state, county, jdict):
 def get_stations_from_networks(state, county):
     """Build a station list by using a bunch of IEM networks."""
     # stations = []
-    state_to_code=pd.read_csv('eagle-idatasets/county_fips_master.csv', encoding='latin')
+    state_to_code=pd.read_csv('Eagle-idatasets/county_fips_master.csv', encoding='latin')
     result = state_to_code[state_to_code['state_name'] == state]
     state_abbr = result['state_abbr'].values[0]
     network=f"{state_abbr}_ASOS"
