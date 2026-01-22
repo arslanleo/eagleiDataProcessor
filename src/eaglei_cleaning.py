@@ -70,6 +70,10 @@ def main(state: str,
     if os.path.exists(customers_data_file_path):
         customers_df = pd.read_parquet(customers_data_file_path)
         total_customers = customers_df[customers_df['county'] == county]['total_customers'].values
+    else:
+        print('Error: Could not find total customers in county. This may interfere with results if percent_customers'
+              'is selected as threshold method.')
+        total_customers=0
     # Extract county-level events using a minimum customer threshold as specified in the config file
     county_data.extract_events_ac_thr(event_detection_type=config.get("data_cleaning_parameters.event_detection_approach","flat"),
                                       total_customers=total_customers,
