@@ -173,7 +173,8 @@ def create_netcdf_weather_stations(state, county, start_year, end_year, raw_data
             station_full[var] = station_full[var].interpolate(method='nearest')
             station_full[var] = station_full[var].ffill()
             station_full[var] = station_full[var].bfill()
-            
+
+
             # Fill the array
             var_array[:, i] = station_full[var].values
         
